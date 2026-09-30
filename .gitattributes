@@ -1,0 +1,25 @@
+# Text files are stored with LF line endings and checked out with LF on every OS, so Windows and
+# Linux (CI, production) see identical files. VS Code, PowerShell, Python and Node all handle LF.
+# This overrides a local core.autocrlf setting.
+* text=auto eol=lf
+
+# Windows batch files need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Recorded device output: stored byte for byte, no line-ending conversion,
+# because replay tests must see exactly what the device sent.
+fixtures/** -text
+
+# Binary files: never convert, never diff as text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.woff binary
+*.woff2 binary

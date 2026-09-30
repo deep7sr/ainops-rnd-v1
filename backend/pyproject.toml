@@ -1,0 +1,63 @@
+# AINOPS (agentic design): MCP servers, knowledge graph, agent service. Run everything with uv
+# from this folder: `uv sync`, `uv run ainops --help`, `uv run pytest`.
+
+[project]
+name = "ainops"
+version = "0.2.0"
+description = "AINOPS: agentic, read-only network troubleshooting over MCP tools"
+readme = "README.md"
+authors = [
+    { name = "Deependra Singh Rajput", email = "deep7sr@gmail.com" }
+]
+# The python.org 3.12 build is the Python Smart App Control allows on the lab laptop.
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.142.2",
+    "langchain>=1.4.3",
+    "langchain-mcp-adapters>=0.3.2",
+    "langchain-openai>=1.6.6",
+    "langgraph>=1.2.12",
+    "mcp>=1.30.0",
+    "neo4j>=6.3.1",
+    "netmiko>=4.8.0",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.3",
+    "pyyaml>=6.0.3",
+    # Pinned: Smart App Control on the lab laptop blocks the 0.17.1 binary (LangChain needs it).
+    "uuid-utils==0.16.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+ainops = "ainops.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.9",
+    "types-pyyaml>=6.0.12.20260906",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "BLE", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["netmiko.*", "ntc_templates.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

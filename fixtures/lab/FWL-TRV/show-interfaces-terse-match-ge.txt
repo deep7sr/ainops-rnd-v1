@@ -1,0 +1,7 @@
+ge-0/0/0                up    up
+ge-0/0/0.0              up    up   inet     10.10.1.2/24    
+ge-0/0/1                up    up
+ge-0/0/1.0              up    up   inet     10.10.2.1/24    
+ge-0/0/2                up    up
+
+root@FWL-TRV> 

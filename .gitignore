@@ -1,0 +1,53 @@
+# --- Secrets and local configuration: never commit (CLAUDE.md safety rule 6) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# --- Databases and dumps: never commit (the POC's ainop.db held plaintext device passwords) ---
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
+
+# --- Logs ---
+logs/
+*.log
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# --- Node / frontend ---
+node_modules/
+.vite/
+*.tsbuildinfo
+coverage/
+*.local
+
+# --- Editors and OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# --- Claude Code: personal settings (shared project settings in .claude/settings.json are committed) ---
+.claude/settings.local.json

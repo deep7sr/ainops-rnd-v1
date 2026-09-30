@@ -1,0 +1,60 @@
+# Checks that run automatically before every `git commit` (frontend hooks come back with the new frontend). CI runs the same checks.
+# One-time setup per clone: `pre-commit install` (docs/SETUP.md). Run on everything: `pre-commit run --all-files`.
+# Update hook versions: `pre-commit autoupdate` (then commit this file).
+
+# Recorded device output must stay byte for byte, so the fixers never touch fixtures/.
+exclude: ^fixtures/
+
+repos:
+  # Every hook here runs as `python -m <module>` instead of its default `<name>.exe`: pip generates
+  # those small .exe starters on this laptop (unsigned, no reputation), and Smart App Control may block
+  # any of them (check-toml.exe was blocked on 2026-09-28). python.exe is the signed python.org one.
+  # docs/SETUP.md section 7.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Block commits made directly on main or dev: all work goes through a branch + PR (CLAUDE.md)
+      - id: no-commit-to-branch
+        entry: python -m pre_commit_hooks.no_commit_to_branch
+        args: [--branch, main, --branch, dev]
+      - id: trailing-whitespace
+        entry: python -m pre_commit_hooks.trailing_whitespace_fixer
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+        entry: python -m pre_commit_hooks.end_of_file_fixer
+      - id: check-yaml
+        entry: python -m pre_commit_hooks.check_yaml
+      - id: check-toml
+        entry: python -m pre_commit_hooks.check_toml
+      - id: check-json
+        entry: python -m pre_commit_hooks.check_json
+        # TypeScript config files allow comments, which plain JSON does not
+        exclude: ^frontend/tsconfig.*\.json$
+      - id: check-merge-conflict
+        entry: python -m pre_commit_hooks.check_merge_conflict
+      - id: check-added-large-files
+        entry: python -m pre_commit_hooks.check_added_large_files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+        entry: python -m pre_commit_hooks.detect_private_key
+
+  # Secret scanner: blocks passwords, API keys, tokens (CLAUDE.md safety rule 6).
+  # Runs the official gitleaks release installed by scripts/setup/install-gitleaks.ps1 (version pinned
+  # there, same as CI). Not gitleaks' own `gitleaks` hook: pre-commit compiles that copy on the laptop
+  # and Smart App Control blocks it (docs/SETUP.md section 7). Not its `gitleaks-system` hook either:
+  # it lacks `pass_filenames: false`, so gitleaks receives file names and refuses to run. Same command.
+  - repo: local
+    hooks:
+      - id: gitleaks-system
+        name: Detect hardcoded secrets (gitleaks)
+        language: system
+        entry: gitleaks git --pre-commit --redact --staged --verbose
+        pass_filenames: false
+
+  # Python lint + format (settings in backend/pyproject.toml)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format

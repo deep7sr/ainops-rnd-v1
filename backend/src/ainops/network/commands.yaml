@@ -1,0 +1,34 @@
+# The ONLY commands the network MCP server can send to a device: one per tool and platform.
+# Written and reviewed by people (network SME: Praveen). The LLM never writes a command: it picks a
+# tool, and the server looks the command up here.
+#
+# Placeholders are filled only with validated values:
+#   {interface}    an interface name matching a strict pattern (e.g. Fa2/0, ge-0/0/1)
+#   {destination}  a private IPv4 address
+# Every rendered command is checked again by guard.py before it is sent (read-only prefixes, allowed
+# pipes, no forbidden words). A tool without a command for a platform is "not supported" there.
+
+cisco_ios:
+  facts: show version
+  interfaces: show ip interface
+  interface_detail: show interfaces {interface}
+  routes: show ip route
+  ospf_neighbors: show ip ospf neighbor
+  routing_protocols: show ip protocols
+  neighbors: show cdp neighbors
+  arp: show arp
+  logs: show logging
+  ping: ping {destination}
+
+juniper_junos:
+  facts: show version | display json
+  interfaces: show interfaces terse | display json
+  interface_detail: show interfaces {interface} extensive | display json
+  routes: show route | display json
+  ospf_neighbors: show ospf neighbor | display json
+  neighbors: show lldp neighbors | display json
+  arp: show arp no-resolve | display json
+  logs: show log messages | last 40
+  ping: ping {destination} count 5 rapid
+  firewall_policies: show security policies | display json
+  firewall_zones: show security zones | display json

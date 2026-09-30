@@ -1,0 +1,72 @@
+# The TRV/MAA lab on EVE-NG (Praveen's topology). One entry per managed device.
+#
+# port:           the EVE-NG console port of the node (telnet to LAB_EVE_HOST:port).
+# platform:       cisco_ios or juniper_junos; picks the commands in network/commands.yaml.
+# credential_ref: name of a login in .env (AINOPS_CRED_<REF>_USERNAME / _PASSWORD). The lab Cisco
+#                 consoles need no login, so they have none. No secret is ever written here.
+# aliases:        other names engineers use for the device.
+
+sites:
+  TRV: Trivandrum
+  MAA: Chennai
+
+devices:
+  - name: ISP-TRV-1
+    site: TRV
+    role: isp-router
+    platform: cisco_ios
+    port: 32770
+    description: TRV Internet edge router
+
+  - name: FWL-TRV
+    site: TRV
+    role: firewall
+    platform: juniper_junos
+    port: 32771
+    credential_ref: lab-srx-admin
+    description: TRV firewall (vSRX)
+
+  - name: CORE-SW-TRV
+    site: TRV
+    role: core
+    platform: cisco_ios
+    port: 32769
+    description: TRV core router, gateway of the TRV LAN 192.168.100.0/24
+
+  - name: IPLC-RTR-TRV
+    site: TRV
+    role: wan-router
+    platform: cisco_ios
+    port: 32775
+    aliases: [TRV-P2P]
+    description: TRV end of the TRV-MAA leased line (IPLC)
+
+  - name: IPLC-RTR-MAA
+    site: MAA
+    role: wan-router
+    platform: cisco_ios
+    port: 32776
+    aliases: [MAA-P2P]
+    description: MAA end of the TRV-MAA leased line (IPLC)
+
+  - name: CORE-SW-MAA
+    site: MAA
+    role: core
+    platform: cisco_ios
+    port: 32774
+    description: MAA core router, gateway of the MAA LAN 192.168.200.0/24
+
+  - name: FWL-MAA
+    site: MAA
+    role: firewall
+    platform: juniper_junos
+    port: 32773
+    credential_ref: lab-srx-admin
+    description: MAA firewall (vSRX)
+
+  - name: ISP-MAA-1
+    site: MAA
+    role: isp-router
+    platform: cisco_ios
+    port: 32772
+    description: MAA Internet edge router

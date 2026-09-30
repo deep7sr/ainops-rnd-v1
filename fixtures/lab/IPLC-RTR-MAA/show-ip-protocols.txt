@@ -1,0 +1,16 @@
+*** IP Routing is NSF aware ***
+
+Routing Protocol is "ospf 1"
+  Outgoing update filter list for all interfaces is not set
+  Incoming update filter list for all interfaces is not set
+  Router ID 10.10.5.1
+  Number of areas in this router is 1. 1 normal 0 stub 0 nssa
+  Maximum path: 4
+  Routing for Networks:
+    10.10.4.0 0.0.0.255 area 0
+    10.10.5.0 0.0.0.255 area 0
+  Routing Information Sources:
+    Gateway         Distance      Last Update
+    192.168.100.1        110      01:03:25
+    192.168.200.1        110      01:34:55
+  Distance: (default is 110)
