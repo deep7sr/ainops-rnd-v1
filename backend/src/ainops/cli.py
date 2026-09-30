@@ -85,6 +85,8 @@ def main() -> None:
     commands.add_parser("mcp-network", help="start the network MCP server (port 8101)")
     commands.add_parser("mcp-topology", help="start the topology MCP server (port 8102)")
     commands.add_parser("discover", help="rebuild the knowledge graph (needs mcp-network + Neo4j)")
+    api = commands.add_parser("api", help="start the API for the web UI (port 8000)")
+    api.add_argument("--reload", action="store_true", help="restart when code changes")
     ask = commands.add_parser("ask", help="investigate a question (needs both MCP servers)")
     ask.add_argument("question")
     args = parser.parse_args()
@@ -99,5 +101,9 @@ def main() -> None:
         run_topology()
     elif args.command == "discover":
         _discover()
+    elif args.command == "api":
+        import uvicorn
+
+        uvicorn.run("ainops.api.app:app", host="127.0.0.1", port=8000, reload=args.reload)
     elif args.command == "ask":
         _ask(args.question)
