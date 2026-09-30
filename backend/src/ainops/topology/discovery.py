@@ -1,0 +1,240 @@
+"""Discovery: build the knowledge graph from what the devices report. Plain code, no LLM.
+
+For every device in the inventory it asks the network MCP server (the only way to reach devices)
+for the interfaces and the CDP/LLDP neighbours, then works out the links:
+- a CDP/LLDP neighbour on an interface is a link (if the neighbour is in the inventory);
+- two devices with addresses in the same subnet are linked (this finds the vSRX firewalls,
+  which do not speak CDP).
+It also reports what looks wrong: links that are down, neighbours not in the inventory, both ends
+of a CDP link in different subnets, addressed interfaces with no known peer.
+Then it compares with the previous graph (links added/removed, interfaces changed) and replaces it.
+"""
+
+import asyncio
+import ipaddress
+from collections import defaultdict
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
+
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+from ainops.inventory import Inventory
+from ainops.topology.graph import GraphStore, InterfaceFact, LinkFact
+
+ProgressCallback = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+@dataclass
+class DeviceReport:
+    interfaces: list[dict[str, Any]] = field(default_factory=list)
+    neighbors: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+
+
+@dataclass
+class DiscoveryResult:
+    at: str
+    source: str
+    devices_ok: list[str]
+    devices_failed: list[str]
+    interfaces: list[InterfaceFact]
+    links: list[LinkFact]
+    findings: list[str]
+    added_links: list[str]
+    removed_links: list[str]
+
+    def summary(self) -> dict[str, Any]:
+        """Flat values only: stored as the (:Discovery) node and shown in the UI."""
+        return {
+            "at": self.at,
+            "source": self.source,
+            "devices_ok": self.devices_ok,
+            "devices_failed": self.devices_failed,
+            "interface_count": len(self.interfaces),
+            "link_count": len(self.links),
+            "findings": self.findings,
+            "added_links": self.added_links,
+            "removed_links": self.removed_links,
+        }
+
+
+def build_links(
+    inventory: Inventory, reports: dict[str, DeviceReport]
+) -> tuple[list[InterfaceFact], list[LinkFact], list[str]]:
+    """Interfaces, links and findings from the per-device answers (pure: unit-tested)."""
+    known = {d.name for d in inventory.devices}
+    interfaces = [
+        InterfaceFact(device=name, name=row["name"], status=row["status"], ipv4=list(row["ipv4"]))
+        for name, report in reports.items()
+        for row in report.interfaces
+    ]
+    by_end = {(i.device, i.name): i for i in interfaces}
+    links: dict[str, LinkFact] = {}
+    findings: list[str] = []
+
+    def add(link: LinkFact) -> None:
+        existing = links.get(link.key)
+        if existing is None:
+            links[link.key] = link
+        else:
+            existing.sources = sorted(set(existing.sources) | set(link.sources))
+            existing.subnet = existing.subnet or link.subnet
+
+    # 1. CDP / LLDP neighbours.
+    for name, report in reports.items():
+        for n in report.neighbors:
+            neighbor = n["neighbor"]
+            if neighbor not in known:
+                findings.append(
+                    f"{name} {n['local_interface']} sees '{neighbor}' ({n['protocol'].upper()}), "
+                    "which is not in the inventory"
+                )
+                continue
+            local = by_end.get((name, n["local_interface"]))
+            remote = by_end.get((neighbor, n["neighbor_interface"]))
+            local_nets = set(local.subnets()) if local else set()
+            remote_nets = set(remote.subnets()) if remote else set()
+            shared = sorted(local_nets & remote_nets)
+            if local_nets and remote_nets and not shared:
+                findings.append(
+                    f"Address mismatch: {name} {n['local_interface']} ({', '.join(local.ipv4)}) "  # type: ignore[union-attr]
+                    f"and {neighbor} {n['neighbor_interface']} ({', '.join(remote.ipv4)}) are "  # type: ignore[union-attr]
+                    "connected but in different subnets"
+                )
+            add(
+                LinkFact(
+                    a=name,
+                    a_interface=n["local_interface"],
+                    b=neighbor,
+                    b_interface=n["neighbor_interface"],
+                    subnet=shared[0] if shared else None,
+                    sources=[n["protocol"]],
+                )
+            )
+
+    # 2. Shared subnets.
+    members: dict[str, list[InterfaceFact]] = defaultdict(list)
+    for interface in interfaces:
+        for cidr in interface.subnets():
+            if ipaddress.ip_network(cidr).prefixlen < 31:
+                members[cidr].append(interface)
+    for cidr, group in sorted(members.items()):
+        for i, first in enumerate(group):
+            for second in group[i + 1 :]:
+                if first.device != second.device:
+                    add(
+                        LinkFact(
+                            a=first.device,
+                            a_interface=first.name,
+                            b=second.device,
+                            b_interface=second.name,
+                            subnet=cidr,
+                            sources=["subnet"],
+                        )
+                    )
+
+    # 3. What looks wrong.
+    linked_ends = {(link.a, link.a_interface) for link in links.values()} | {
+        (link.b, link.b_interface) for link in links.values()
+    }
+    for link in sorted(links.values(), key=lambda x: x.key):
+        down = [
+            f"{d} {i} is {by_end[(d, i)].status}"
+            for d, i in ((link.a, link.a_interface), (link.b, link.b_interface))
+            if (d, i) in by_end and by_end[(d, i)].status != "up"
+        ]
+        if down:
+            findings.append(f"Link {link.a} - {link.b} is not up: {'; '.join(down)}")
+    for interface in interfaces:
+        if interface.ipv4 and (interface.device, interface.name) not in linked_ends:
+            findings.append(
+                f"{interface.device} {interface.name} ({', '.join(interface.ipv4)}, "
+                f"{interface.status}) has no known peer: a LAN or uplink, or a mis-addressed link"
+            )
+    return interfaces, sorted(links.values(), key=lambda x: x.key), findings
+
+
+async def collect(
+    network_url: str, inventory: Inventory, progress: ProgressCallback | None = None
+) -> tuple[dict[str, DeviceReport], str]:
+    """Ask the network MCP server about every device (4 at a time: one console each)."""
+    reports: dict[str, DeviceReport] = {}
+    source = "unknown"
+    limit = asyncio.Semaphore(4)
+    async with (
+        streamablehttp_client(network_url) as (read, write, _),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+
+        async def one(name: str) -> None:
+            nonlocal source
+            async with limit:
+                if progress:
+                    await progress({"type": "device_started", "device": name})
+                report = DeviceReport()
+                result = await session.call_tool("get_interfaces", {"device": name})
+                if result.isError or not result.structuredContent:
+                    report.error = _error_text(result)
+                else:
+                    report.interfaces = result.structuredContent["data"]
+                    source = result.structuredContent["evidence"]["source"]
+                    neighbors = await session.call_tool("get_neighbors", {"device": name})
+                    if not neighbors.isError and neighbors.structuredContent:
+                        data = neighbors.structuredContent["data"]
+                        report.neighbors = data if isinstance(data, list) else []
+                reports[name] = report
+                if progress:
+                    await progress(
+                        {
+                            "type": "device_done",
+                            "device": name,
+                            "ok": report.error is None,
+                            "interfaces": len(report.interfaces),
+                            "neighbors": len(report.neighbors),
+                            "error": report.error,
+                        }
+                    )
+
+        await asyncio.gather(*(one(d.name) for d in inventory.devices))
+    return reports, source
+
+
+def _error_text(result: Any) -> str:
+    try:
+        return str(result.content[0].text)[:300]
+    except (AttributeError, IndexError):
+        return "no answer"
+
+
+async def discover(
+    network_url: str,
+    inventory: Inventory,
+    store: GraphStore,
+    progress: ProgressCallback | None = None,
+) -> DiscoveryResult:
+    previous = {row["key"] for row in store.links()}
+    reports, source = await collect(network_url, inventory, progress)
+    usable = {name: r for name, r in reports.items() if r.error is None}
+    interfaces, links, findings = build_links(inventory, usable)
+    current = {link.key for link in links}
+
+    def answered(key: str) -> bool:  # a link can only be "removed" if both ends answered
+        return all(end.split(":", 1)[0] in usable for end in key.split("|"))
+
+    result = DiscoveryResult(
+        at=datetime.now(UTC).isoformat(timespec="seconds"),
+        source=source,
+        devices_ok=sorted(usable),
+        devices_failed=sorted(f"{n}: {r.error}" for n, r in reports.items() if r.error),
+        interfaces=interfaces,
+        links=links,
+        findings=findings,
+        added_links=sorted(current - previous) if previous else [],
+        removed_links=sorted(k for k in previous - current if answered(k)),
+    )
+    store.replace_topology(inventory, interfaces, links, result.summary())
+    return result
