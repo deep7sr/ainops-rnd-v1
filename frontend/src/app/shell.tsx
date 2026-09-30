@@ -1,0 +1,198 @@
+import { useQuery } from '@tanstack/react-query'
+import {
+  History,
+  Moon,
+  Network,
+  ScrollText,
+  Sparkles,
+  Sun,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
+import { useEffect } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router'
+import { api, type Health } from '@/api'
+import { UstLogo } from '@/components/ust-logo'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/ui/sidebar'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useTheme } from '@/app/theme/theme-context'
+import { cn } from '@/lib/utils'
+
+const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
+  { to: '/', label: 'Investigate', icon: Sparkles, end: true },
+  { to: '/graph', label: 'Knowledge graph', icon: Network },
+  { to: '/tools', label: 'MCP tools', icon: Wrench },
+  { to: '/history', label: 'History', icon: History },
+  { to: '/audit', label: 'Audit log', icon: ScrollText },
+]
+
+function isActive(path: string, item: (typeof NAV)[number]) {
+  if (item.end) return path === '/' || path.startsWith('/investigations')
+  return path.startsWith(item.to)
+}
+
+function StatusDot({
+  ok,
+  label,
+  detail,
+}: {
+  ok: boolean | undefined
+  label: string
+  detail: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex cursor-default items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted-foreground">
+          <span
+            aria-hidden="true"
+            className={cn(
+              'size-2 rounded-full',
+              ok === undefined
+                ? 'bg-status-unknown'
+                : ok
+                  ? 'bg-status-healthy'
+                  : 'bg-status-critical',
+            )}
+          />
+          {label}
+          <span className="sr-only">: {detail}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{detail}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function HealthBar({ health }: { health: Health | undefined }) {
+  const up = (ok: boolean | undefined, yes: string) =>
+    ok === undefined ? 'checking…' : ok ? yes : 'not reachable'
+  return (
+    <div className="hidden items-center gap-1 md:flex">
+      <StatusDot
+        ok={health?.mcp_network.ok}
+        label="Network MCP"
+        detail={up(health?.mcp_network.ok, `${health?.mcp_network.tools} tools`)}
+      />
+      <StatusDot
+        ok={health?.mcp_topology.ok}
+        label="Topology MCP"
+        detail={up(health?.mcp_topology.ok, `${health?.mcp_topology.tools} tools`)}
+      />
+      <StatusDot
+        ok={health?.graph.ok}
+        label="Graph"
+        detail={up(health?.graph.ok, 'Neo4j connected')}
+      />
+      <StatusDot
+        ok={health?.llm_configured}
+        label="LLM"
+        detail={health ? health.llm_model || 'not configured' : 'checking…'}
+      />
+    </div>
+  )
+}
+
+export function Shell() {
+  const location = useLocation()
+  const { resolved, setChoice } = useTheme()
+  const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15000 })
+  const current = NAV.find((item) => isActive(location.pathname, item))
+
+  useEffect(() => {
+    document.title = current ? `${current.label} · AINOPS` : 'AINOPS'
+  }, [current])
+
+  return (
+    <SidebarProvider>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="px-3 py-3">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <UstLogo className="h-6 w-auto shrink-0 text-foreground" />
+            <div className="leading-tight group-data-[collapsible=icon]:hidden">
+              <p className="text-sm font-semibold">AINOPS</p>
+              <p className="text-[11px] text-muted-foreground">Agentic network ops</p>
+            </div>
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {NAV.map((item) => (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(location.pathname, item)}
+                      tooltip={item.label}
+                    >
+                      <NavLink to={item.to} end={item.end}>
+                        <item.icon aria-hidden="true" />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter className="px-3 py-3 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+          Read-only. AINOPS never changes a device.
+        </SidebarFooter>
+      </Sidebar>
+
+      <SidebarInset className="min-w-0">
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+          <SidebarTrigger aria-label="Toggle sidebar" />
+          <Separator
+            orientation="vertical"
+            className="mr-1 data-vertical:h-5 data-vertical:self-center"
+          />
+          <p className="text-sm font-medium">{current?.label ?? 'AINOPS'}</p>
+          <div className="ml-auto flex items-center gap-2">
+            <HealthBar health={health.data} />
+            {health.data && (
+              <span
+                className={cn(
+                  'rounded border px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase',
+                  health.data.executor === 'live'
+                    ? 'border-status-healthy-border bg-status-healthy-bg text-status-healthy'
+                    : 'border-status-warning-border bg-status-warning-bg text-status-warning',
+                )}
+              >
+                Lab · {health.data.executor === 'live' ? 'live devices' : 'recorded data'}
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={resolved === 'dark' ? 'Use light theme' : 'Use dark theme'}
+              onClick={() => setChoice(resolved === 'dark' ? 'light' : 'dark')}
+            >
+              {resolved === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+            </Button>
+          </div>
+        </header>
+        <main className="relative h-[calc(100svh-3.5rem)] min-h-0 min-w-0 overflow-y-auto">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}

@@ -58,3 +58,20 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+
+  # Frontend format + lint, run inside frontend/ exactly like `npm run format:check` / `npm run lint`.
+  # Needs `npm ci` in frontend/ once. Type checks and tests: `npm run check` in frontend/.
+  - repo: local
+    hooks:
+      - id: frontend-prettier
+        name: prettier (frontend)
+        language: system
+        entry: npm --prefix frontend run --silent format:check
+        files: ^frontend/
+        pass_filenames: false
+      - id: frontend-eslint
+        name: eslint (frontend)
+        language: system
+        entry: npm --prefix frontend run --silent lint -- --max-warnings 0
+        files: ^frontend/
+        pass_filenames: false

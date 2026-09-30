@@ -1,0 +1,6 @@
+dist
+coverage
+package-lock.json
+# Generated (npm run api:generate / uv run ainops openapi): never edit or reformat by hand
+src/api/openapi.json
+src/api/schema.d.ts

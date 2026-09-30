@@ -1,0 +1,46 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { createBrowserRouter, RouterProvider } from 'react-router'
+import { Shell } from '@/app/shell'
+import { ThemeProvider } from '@/app/theme/theme-provider'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { AuditPage } from '@/features/audit/audit-page'
+import { HistoryPage } from '@/features/history/history-page'
+import { InvestigatePage } from '@/features/investigate/investigate-page'
+import { ToolsPage } from '@/features/tools/tools-page'
+import { TopologyPage } from '@/features/topology/topology-page'
+import './index.css'
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+})
+
+const router = createBrowserRouter([
+  {
+    element: <Shell />,
+    children: [
+      { path: '/', element: <InvestigatePage /> },
+      { path: '/investigations/:id', element: <InvestigatePage /> },
+      { path: '/graph', element: <TopologyPage /> },
+      { path: '/tools', element: <ToolsPage /> },
+      { path: '/history', element: <HistoryPage /> },
+      { path: '/audit', element: <AuditPage /> },
+    ],
+  },
+])
+
+const root = document.getElementById('root')
+if (!root) throw new Error('index.html has no #root element')
+
+createRoot(root).render(
+  <StrictMode>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider delayDuration={200}>
+          <RouterProvider router={router} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  </StrictMode>,
+)

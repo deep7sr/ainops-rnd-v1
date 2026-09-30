@@ -1,0 +1,239 @@
+/*
+ * AINOPS design tokens (ARCHITECTURE 17.1, D40).
+ *
+ * Every colour the UI uses is defined here once, as a CSS variable, for the light theme (`:root`, the
+ * default) and the dark theme (`.dark` on <html>). Components never use raw colour values; they use the
+ * Tailwind classes generated from `@theme inline` below (`bg-primary`, `text-status-critical`, ...).
+ *
+ * Brand: UST palette from brand.ust.com: dark teal #006E74, light teal #0097AC, soft black #231F20,
+ * white. Teal means "brand and clickable"; it is never used to mean a status.
+ *
+ * Accessibility: `src/styles/tokens.test.ts` checks the contrast of every text/background pair listed
+ * there in both themes (WCAG 2.1 AA). If you change a colour, run `npm test`.
+ */
+
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Maps the variables below to Tailwind class names. `inline` makes the classes follow the theme. */
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* AINOPS: health status of a device, link or check */
+  --color-status-healthy: var(--status-healthy);
+  --color-status-healthy-bg: var(--status-healthy-bg);
+  --color-status-healthy-border: var(--status-healthy-border);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-border: var(--status-warning-border);
+  --color-status-critical: var(--status-critical);
+  --color-status-critical-bg: var(--status-critical-bg);
+  --color-status-critical-border: var(--status-critical-border);
+  --color-status-unknown: var(--status-unknown);
+  --color-status-unknown-bg: var(--status-unknown-bg);
+  --color-status-unknown-border: var(--status-unknown-border);
+
+  /* AINOPS: where a statement came from (an approved rule, or the AI's own reading) */
+  --color-provenance-rule: var(--provenance-rule);
+  --color-provenance-rule-bg: var(--provenance-rule-bg);
+  --color-provenance-rule-border: var(--provenance-rule-border);
+  --color-provenance-ai: var(--provenance-ai);
+  --color-provenance-ai-bg: var(--provenance-ai-bg);
+  --color-provenance-ai-border: var(--provenance-ai-border);
+
+  /* AINOPS: LAB environment badge, and "eyebrow" labels (small all-caps section labels, UST brand) */
+  --color-lab: var(--lab);
+  --color-lab-foreground: var(--lab-foreground);
+  --color-eyebrow: var(--eyebrow);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light theme (default) */
+:root {
+  /* Theme-independent: corner radius. Small on purpose: the UST brand uses square shapes. */
+  --radius: 0.375rem;
+
+  --background: #ffffff;
+  --foreground: #231f20; /* UST soft black */
+  --card: #ffffff;
+  --card-foreground: #231f20;
+  --popover: #ffffff;
+  --popover-foreground: #231f20;
+  --primary: #006e74; /* UST dark teal */
+  --primary-foreground: #ffffff;
+  --secondary: #e5f1f2;
+  --secondary-foreground: #004d52;
+  --muted: #f2f6f6;
+  --muted-foreground: #596164;
+  --accent: #e5f1f2;
+  --accent-foreground: #231f20;
+  --destructive: #b42318;
+  --border: #dce3e4;
+  --input: #c3cdcf;
+  --ring: #0097ac; /* UST light teal */
+  --chart-1: #006e74;
+  --chart-2: #0097ac;
+  --chart-3: #5b6bbf;
+  --chart-4: #c9821b;
+  --chart-5: #7a8184;
+  --sidebar: #f7fafa;
+  --sidebar-foreground: #231f20;
+  --sidebar-primary: #006e74;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e5f1f2;
+  --sidebar-accent-foreground: #231f20;
+  --sidebar-border: #dce3e4;
+  --sidebar-ring: #0097ac;
+
+  --status-healthy: #17753a;
+  --status-healthy-bg: #e8f5ec;
+  --status-healthy-border: #b3dcc0;
+  --status-warning: #8f5400;
+  --status-warning-bg: #fff4e0;
+  --status-warning-border: #f2d096;
+  --status-critical: #b42318;
+  --status-critical-bg: #fdecea;
+  --status-critical-border: #f4b8b1;
+  --status-unknown: #596164;
+  --status-unknown-bg: #f0f2f3;
+  --status-unknown-border: #cdd3d5;
+
+  --provenance-rule: #1d4f91;
+  --provenance-rule-bg: #e8f0fb;
+  --provenance-rule-border: #b9cfee;
+  --provenance-ai: #6b3fa0;
+  --provenance-ai-bg: #f3edfa;
+  --provenance-ai-border: #d7c6ee;
+
+  --lab: #f5a524;
+  --lab-foreground: #231f20;
+  --eyebrow: #006e74; /* dark teal: light teal on white is too faint for small text */
+}
+
+/* Dark theme: built on UST soft black, with light teal as the accent */
+.dark {
+  --background: #231f20; /* UST soft black */
+  --foreground: #f4f2f2;
+  --card: #2b2728;
+  --card-foreground: #f4f2f2;
+  --popover: #2e2a2b;
+  --popover-foreground: #f4f2f2;
+  --primary: #1fa9bd; /* UST light teal, one step lighter so links stay readable on dark cards */
+  --primary-foreground: #231f20;
+  --secondary: #1d3a3d;
+  --secondary-foreground: #cdeef2;
+  --muted: #2e2a2b;
+  --muted-foreground: #b3adae;
+  --accent: #363132;
+  --accent-foreground: #f4f2f2;
+  --destructive: #ff8a80;
+  --border: #3d3839;
+  --input: #4f494a;
+  --ring: #22b8cc;
+  --chart-1: #0097ac;
+  --chart-2: #5fd0df;
+  --chart-3: #8e9cf0;
+  --chart-4: #f5b84a;
+  --chart-5: #a39d9e;
+  --sidebar: #1c191a;
+  --sidebar-foreground: #f4f2f2;
+  --sidebar-primary: #1fa9bd;
+  --sidebar-primary-foreground: #231f20;
+  --sidebar-accent: #363132;
+  --sidebar-accent-foreground: #f4f2f2;
+  --sidebar-border: #3d3839;
+  --sidebar-ring: #22b8cc;
+
+  --status-healthy: #5fd08a;
+  --status-healthy-bg: #1a3324;
+  --status-healthy-border: #2e5a3e;
+  --status-warning: #f5b84a;
+  --status-warning-bg: #3a2c12;
+  --status-warning-border: #6b4f1c;
+  --status-critical: #ff8a80;
+  --status-critical-bg: #3f1d1b;
+  --status-critical-border: #6e302c;
+  --status-unknown: #b3adae;
+  --status-unknown-bg: #2e2a2b;
+  --status-unknown-border: #4f494a;
+
+  --provenance-rule: #8db6f0;
+  --provenance-rule-bg: #1c2a40;
+  --provenance-rule-border: #34507a;
+  --provenance-ai: #c4a6f0;
+  --provenance-ai-bg: #2d2140;
+  --provenance-ai-border: #523c75;
+
+  --lab: #f5a524;
+  --lab-foreground: #231f20;
+  --eyebrow: #2bb3c6; /* a lighter light teal, readable on soft black and on cards */
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  code,
+  kbd,
+  pre,
+  samp {
+    @apply font-mono;
+  }
+}
+
+/* UST brand: eyebrows are the only text set in all caps. Use `className="eyebrow"`. */
+@utility eyebrow {
+  @apply text-xs font-bold tracking-wider text-eyebrow uppercase;
+}
