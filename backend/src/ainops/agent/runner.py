@@ -23,10 +23,11 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 from langchain.agents.structured_output import ToolStrategy
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.types import Command
 
 from ainops.agent.prompts import SYSTEM_PROMPT
@@ -240,7 +241,17 @@ def with_reason(tool: BaseTool) -> BaseTool:
     return tool.model_copy(update={"args_schema": schema})
 
 
-def build_model(settings: Settings) -> ChatOpenAI:
+def build_model(settings: Settings) -> BaseChatModel:
+    if settings.llm_provider == "azure_openai":
+        # GPT-5.x deployments are reasoning models: they accept only the default temperature.
+        return AzureChatOpenAI(
+            azure_endpoint=settings.azure_ai_endpoint,
+            api_key=settings.azure_ai_api_key,
+            api_version=settings.azure_api_version,
+            azure_deployment=settings.azure_model,
+            max_retries=4,
+            timeout=120,
+        )
     return ChatOpenAI(
         model=settings.llm_model_reasoning,
         base_url=settings.llm_base_url,

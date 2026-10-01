@@ -124,3 +124,37 @@ def test_cisco_logs_keep_only_messages() -> None:
     )
     lines = parsers.logs("cisco_ios", text, limit=10)
     assert len(lines) == 2 and "%OSPF-5-ADJCHG" in lines[1]
+
+
+def test_junos_internal_loopback_units_are_skipped() -> None:
+    document = {
+        "interface-information": [
+            {
+                "physical-interface": [
+                    {
+                        "name": _j("lo0"),
+                        "admin-status": _j("up"),
+                        "oper-status": _j("up"),
+                        "logical-interface": [
+                            {
+                                "name": _j(unit),
+                                "address-family": [
+                                    {
+                                        "address-family-name": _j("inet"),
+                                        "interface-address": [{"ifa-local": _j(address)}],
+                                    }
+                                ],
+                            }
+                            for unit, address in [
+                                ("lo0.0", "10.255.0.1/32"),
+                                ("lo0.16384", "127.0.0.1"),
+                                ("lo0.16385", "128.0.0.1"),
+                            ]
+                        ],
+                    }
+                ]
+            }
+        ]
+    }
+    rows = parsers.interfaces("juniper_junos", json.dumps(document))
+    assert rows[0]["ipv4"] == ["10.255.0.1/32"]

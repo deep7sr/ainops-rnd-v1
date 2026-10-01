@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -35,11 +35,34 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: SecretStr = SecretStr("")
 
-    # LLM through an OpenAI-compatible API (Groq in the lab, the company LiteLLM gateway later).
+    # Which LLM the agent uses:
+    # "azure_openai":      the company Azure AI Foundry deployment (AZURE_AI_* and MODEL below).
+    #                      Reachable only from the UST network or VPN (firewall on the resource).
+    # "openai_compatible": any OpenAI-compatible API (LLM_* below; Groq in the lab, LiteLLM later).
+    llm_provider: Literal["azure_openai", "openai_compatible"] = "openai_compatible"
+
+    azure_ai_endpoint: str = ""
+    azure_ai_api_key: SecretStr = SecretStr("")
+    azure_api_version: str = ""
+    azure_model: str = Field(default="", validation_alias="MODEL")  # the deployment name
+
     llm_base_url: str = ""
     llm_api_key: SecretStr = SecretStr("")
     llm_model_reasoning: str = ""
     llm_model_fast: str = ""
+
+    @property
+    def llm_model(self) -> str:
+        return self.azure_model if self.llm_provider == "azure_openai" else self.llm_model_reasoning
+
+    @property
+    def llm_configured(self) -> bool:
+        if self.llm_provider == "azure_openai":
+            key = self.azure_ai_api_key.get_secret_value()
+            return bool(
+                self.azure_ai_endpoint and key and self.azure_api_version and self.azure_model
+            )
+        return bool(self.llm_base_url and self.llm_api_key.get_secret_value())
 
 
 @lru_cache

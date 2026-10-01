@@ -76,8 +76,9 @@ async def _list_tools(url: str) -> list[dict[str, Any]]:
 async def health() -> dict[str, Any]:
     status: dict[str, Any] = {
         "executor": settings.lab_executor,
-        "llm_model": settings.llm_model_reasoning,
-        "llm_configured": bool(settings.llm_base_url and settings.llm_api_key.get_secret_value()),
+        "llm_provider": settings.llm_provider,
+        "llm_model": settings.llm_model,
+        "llm_configured": settings.llm_configured,
     }
     for name, url in MCP_SERVERS.items():
         try:

@@ -154,6 +154,10 @@ def interfaces(platform: str, text: str) -> list[dict[str, Any]]:
         oper = _leaf(physical, "oper-status")
         addresses = []
         for logical in _items(physical, "logical-interface"):
+            # lo0.16384 / lo0.16385 / lo0.32768 are Junos-internal (127.x, 128.x): skip them.
+            unit = _leaf(logical, "name").rpartition(".")[2]
+            if unit.isdigit() and int(unit) >= 16384:
+                continue
             for family in _items(logical, "address-family"):
                 if _leaf(family, "address-family-name") != "inet":
                     continue
