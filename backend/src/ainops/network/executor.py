@@ -5,6 +5,12 @@ so reusing the session makes the agent's many small checks fast. A lock per devi
 one command runs on a console at a time (a console cannot be shared). Every redacted output is also
 recorded to fixtures/lab/<device>/<command>.txt, so a rehearsal becomes the replay set.
 
+An idle console logs out (Cisco: exec-timeout, 10 min in the lab). The next command wakes it in a
+new EXEC session that has lost our settings, so long output stops at "--More--" and the command
+times out. A session idle for longer than IDLE_REFRESH_S is therefore prepared again (prompt, no
+paging) before it is used. A broken session is closed without typing anything: "exit" sent into a
+"--More--" pager arrives as "xit", which the router tries to resolve as a host name for ~20 s.
+
 Replay mode answers from those recordings and contacts no device: the fallback if the lab fails,
 and what the tests use.
 """
@@ -27,6 +33,10 @@ _DEVICE_ERRORS = {
     "cisco_ios": ("% Invalid input", "% Incomplete command", "% Ambiguous command"),
     "juniper_junos": ("syntax error", "unknown command", "error: "),
 }
+
+
+# Well under the lab's 10 min console exec-timeout: after this long idle, prepare the session again.
+IDLE_REFRESH_S = 240
 
 
 class DeviceUnreachableError(Exception):
@@ -93,8 +103,10 @@ class LiveExecutor:
         self.eve_host = eve_host
         self.fixtures = fixtures
         self._sessions: dict[str, Any] = {}
+        self._last_used: dict[str, float] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+        self._clock = time.monotonic  # replaced in tests
 
     def _lock(self, device: Device) -> threading.Lock:
         with self._locks_guard:
@@ -123,13 +135,25 @@ class LiveExecutor:
         if session is None:
             session = self._connect(device)
             self._sessions[device.name] = session
+        elif self._clock() - self._last_used.get(device.name, 0.0) > IDLE_REFRESH_S:
+            # The console may have logged out meanwhile: wake it with a bare RETURN first (a
+            # logged-out Cisco console drops everything typed before RETURN), then re-apply
+            # no-paging etc. find_prompt() consumes the prompt and Junos preparation starts by
+            # waiting for one (20 s timeout), so one more RETURN leaves a fresh prompt waiting.
+            session.clear_buffer()
+            session.find_prompt()
+            session.write_channel(session.RETURN)
+            session.session_preparation()
         return session
 
     def _drop(self, device: Device) -> None:
+        self._last_used.pop(device.name, None)
         session = self._sessions.pop(device.name, None)
         if session is not None:
+            # Close the connection only. disconnect() would type "exit" into a console in an
+            # unknown state (see the module docstring).
             with contextlib.suppress(Exception):  # the session is broken anyway
-                session.disconnect()
+                session.remote_conn.close()
 
     def run(self, device: Device, command: str) -> RawOutput:
         check_command(command, device.platform)
@@ -140,6 +164,7 @@ class LiveExecutor:
                 try:
                     session = self._session(device)
                     output = str(session.send_command(command, read_timeout=60))
+                    self._last_used[device.name] = self._clock()
                     break
                 except Exception as error:  # noqa: BLE001 - Netmiko raises many types
                     self._drop(device)
