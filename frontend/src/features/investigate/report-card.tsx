@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import type { Report } from '@/api'
 import { cn } from '@/lib/utils'
-import type { Verdict } from './derive'
+import { needsEvidence, type Verdict } from './derive'
 import { formatMs } from './format'
 
 const OUTCOMES: Record<Report['outcome'], { label: string; icon: LucideIcon; className: string }> =
@@ -73,7 +73,7 @@ export function ReportCard({
   const outcome = OUTCOMES[report.outcome]
   const Icon = outcome.icon
   // A refusal or a plain answer needs no network evidence: no confidence meter.
-  const needsEvidence = report.outcome !== 'refused' && report.outcome !== 'answered'
+  const withEvidence = needsEvidence(report.outcome)
 
   return (
     <section aria-label="Diagnosis" className="rounded-lg border bg-card shadow-xs">
@@ -87,7 +87,7 @@ export function ReportCard({
           <Icon aria-hidden="true" className="size-4" />
           {outcome.label}
         </span>
-        {needsEvidence && (
+        {withEvidence && (
           <span className="flex items-center gap-2 text-sm" title={reasons.join('\n')}>
             <span className="flex items-end gap-0.5" aria-hidden="true">
               {[1, 2, 3].map((bar) => (
@@ -186,7 +186,7 @@ export function ReportCard({
         )}
 
         <div className="grid gap-4 border-t pt-4 text-xs text-muted-foreground sm:grid-cols-2">
-          {needsEvidence && (
+          {withEvidence && (
             <div>
               <p className="font-semibold text-foreground">Why this confidence</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4">

@@ -1,0 +1,501 @@
+{
+ "id": "inv-4e9ca0b1",
+ "kind": "investigation",
+ "title": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+ "started_at": "2026-10-05T15:30:43+00:00",
+ "events": [
+  {
+   "type": "started",
+   "question": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+   "tools": [
+    "find_device",
+    "get_arp_table",
+    "get_device_facts",
+    "get_device_links",
+    "get_firewall_policies",
+    "get_firewall_zones",
+    "get_interface_detail",
+    "get_interfaces",
+    "get_logs",
+    "get_neighbors",
+    "get_ospf_neighbors",
+    "get_path",
+    "get_routes",
+    "get_routing_protocols",
+    "get_topology_summary",
+    "list_devices",
+    "ping"
+   ],
+   "at_ms": 0
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_topology_summary"
+   ],
+   "at_ms": 17500
+  },
+  {
+   "type": "tool_call",
+   "id": "E1",
+   "tool": "get_topology_summary",
+   "server": "topology",
+   "args": {},
+   "why": "Check overall lab topology for sites TRV and MAA and IPLC OSPF link",
+   "at_ms": 17500
+  },
+  {
+   "type": "tool_result",
+   "id": "E1",
+   "tool": "get_topology_summary",
+   "server": "topology",
+   "device": null,
+   "ok": true,
+   "summary": "8 devices in 2 sites, 6 links, 5 discovery findings",
+   "data": {
+    "summary": "8 devices in 2 sites, 6 links, 5 discovery findings",
+    "sites": {
+     "MAA": [
+      "CORE-SW-MAA (core)",
+      "FWL-MAA (firewall)",
+      "IPLC-RTR-MAA (wan-router)",
+      "ISP-MAA-1 (isp-router)"
+     ],
+     "TRV": [
+      "CORE-SW-TRV (core)",
+      "FWL-TRV (firewall)",
+      "IPLC-RTR-TRV (wan-router)",
+      "ISP-TRV-1 (isp-router)"
+     ]
+    },
+    "device_count": 8,
+    "link_count": 6,
+    "findings_from_last_discovery": [
+     "CORE-SW-TRV E1/0 (192.168.100.1/24, up) has no known peer: a LAN or uplink, or a mis-addressed link",
+     "CORE-SW-MAA E1/0 (192.168.200.1/24, up) has no known peer: a LAN or uplink, or a mis-addressed link",
+     "ISP-MAA-1 Fa0/0 (192.168.1.15/24, up) has no known peer: a LAN or uplink, or a mis-addressed link",
+     "ISP-MAA-1 Fa1/0 (10.10.8.1/24, up) has no known peer: a LAN or uplink, or a mis-addressed link",
+     "FWL-MAA ge-0/0/0 (10.10.7.2/24, up) has no known peer: a LAN or uplink, or a mis-addressed link"
+    ],
+    "devices_not_reached": [],
+    "graph_as_of": "2026-10-05T12:04:35+00:00"
+   },
+   "evidence": null,
+   "duration_ms": 594,
+   "at_ms": 18094
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_path"
+   ],
+   "at_ms": 39109
+  },
+  {
+   "type": "tool_call",
+   "id": "E2",
+   "tool": "get_path",
+   "server": "topology",
+   "args": {
+    "destination": "192.168.200.10",
+    "source": "CORE-SW-TRV"
+   },
+   "why": "Find path from TRV core to host 192.168.200.10",
+   "at_ms": 39109
+  },
+  {
+   "type": "tool_result",
+   "id": "E2",
+   "tool": "get_path",
+   "server": "topology",
+   "device": null,
+   "ok": true,
+   "summary": "path CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA (3 hops)",
+   "data": {
+    "summary": "path CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA (3 hops)",
+    "source": "CORE-SW-TRV",
+    "destination": "CORE-SW-MAA",
+    "devices": [
+     "CORE-SW-TRV",
+     "IPLC-RTR-TRV",
+     "IPLC-RTR-MAA",
+     "CORE-SW-MAA"
+    ],
+    "hops": [
+     {
+      "from": "CORE-SW-TRV",
+      "from_interface": "Fa2/0",
+      "to": "IPLC-RTR-TRV",
+      "to_interface": "Fa0/0",
+      "subnet": "10.10.3.0/24"
+     },
+     {
+      "from": "IPLC-RTR-TRV",
+      "from_interface": "Fa2/0",
+      "to": "IPLC-RTR-MAA",
+      "to_interface": "Fa2/0",
+      "subnet": "10.10.4.0/24"
+     },
+     {
+      "from": "IPLC-RTR-MAA",
+      "from_interface": "Fa0/0",
+      "to": "CORE-SW-MAA",
+      "to_interface": "Fa2/0",
+      "subnet": "10.10.5.0/24"
+     }
+    ],
+    "notes": [
+     "destination 192.168.200.10: address is in this interface's subnet CORE-SW-MAA E1/0"
+    ],
+    "graph_as_of": "2026-10-05T12:04:35+00:00"
+   },
+   "evidence": null,
+   "duration_ms": 718,
+   "at_ms": 39827
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_interfaces"
+   ],
+   "at_ms": 68563
+  },
+  {
+   "type": "tool_call",
+   "id": "E3",
+   "tool": "get_interfaces",
+   "server": "network",
+   "args": {
+    "device": "CORE-SW-TRV"
+   },
+   "why": "Check interface status for TRV core switch",
+   "at_ms": 68563
+  },
+  {
+   "type": "tool_result",
+   "id": "E3",
+   "tool": "get_interfaces",
+   "server": "network",
+   "device": "CORE-SW-TRV",
+   "ok": true,
+   "summary": "6 interfaces; all addressed interfaces up",
+   "data": [
+    {
+     "name": "Fa0/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.2.2/24"
+     ]
+    },
+    {
+     "name": "E1/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "192.168.100.1/24"
+     ]
+    },
+    {
+     "name": "E1/1",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/2",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/3",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "Fa2/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.3.1/24"
+     ]
+    }
+   ],
+   "evidence": {
+    "command": "show ip interface",
+    "source": "live",
+    "collected_at": "2026-10-05T15:31:54+00:00",
+    "duration_ms": 735
+   },
+   "duration_ms": 1296,
+   "at_ms": 69859,
+   "health": {
+    "status": "ok",
+    "issues": []
+   }
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_interfaces"
+   ],
+   "at_ms": 93297
+  },
+  {
+   "type": "tool_call",
+   "id": "E4",
+   "tool": "get_interfaces",
+   "server": "network",
+   "args": {
+    "device": "IPLC-RTR-TRV"
+   },
+   "why": "Check interface status on TRV WAN router",
+   "at_ms": 93297
+  },
+  {
+   "type": "tool_result",
+   "id": "E4",
+   "tool": "get_interfaces",
+   "server": "network",
+   "device": "IPLC-RTR-TRV",
+   "ok": true,
+   "summary": "6 interfaces; all addressed interfaces up",
+   "data": [
+    {
+     "name": "Fa0/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.3.2/24"
+     ]
+    },
+    {
+     "name": "E1/0",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/1",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/2",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/3",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "Fa2/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.4.1/24"
+     ]
+    }
+   ],
+   "evidence": {
+    "command": "show ip interface",
+    "source": "live",
+    "collected_at": "2026-10-05T15:32:19+00:00",
+    "duration_ms": 578
+   },
+   "duration_ms": 1187,
+   "at_ms": 94484,
+   "health": {
+    "status": "ok",
+    "issues": []
+   }
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_interfaces"
+   ],
+   "at_ms": 118719
+  },
+  {
+   "type": "tool_call",
+   "id": "E5",
+   "tool": "get_interfaces",
+   "server": "network",
+   "args": {
+    "device": "IPLC-RTR-MAA"
+   },
+   "why": "Check interface status on MAA WAN router",
+   "at_ms": 118719
+  },
+  {
+   "type": "tool_result",
+   "id": "E5",
+   "tool": "get_interfaces",
+   "server": "network",
+   "device": "IPLC-RTR-MAA",
+   "ok": true,
+   "summary": "3 interfaces; with an address but not up: Fa2/0",
+   "data": [
+    {
+     "name": "Fa0/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.5.1/24"
+     ]
+    },
+    {
+     "name": "Fa1/0",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "Fa2/0",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": [
+      "10.10.4.2/24"
+     ]
+    }
+   ],
+   "evidence": {
+    "command": "show ip interface",
+    "source": "live",
+    "collected_at": "2026-10-05T15:32:44+00:00",
+    "duration_ms": 577
+   },
+   "duration_ms": 1187,
+   "at_ms": 119906,
+   "health": {
+    "status": "problem",
+    "issues": [
+     {
+      "text": "Fa2/0 is administratively down (shut)",
+      "interface": "Fa2/0"
+     }
+    ]
+   }
+  },
+  {
+   "type": "report",
+   "report": {
+    "outcome": "diagnosed",
+    "summary": "The TRV users cannot reach the MAA host because the WAN router at MAA has its Fa2/0 interface administratively shut. Enabling that interface will restore the path and OSPF adjacency, fixing the connectivity issue.",
+    "root_cause": "Admin‑down interface Fa2/0 on IPLC-RTR-MAA breaks the WAN link between the two sites.",
+    "root_cause_evidence": [
+     "E5"
+    ],
+    "affected": [
+     "IPLC-RTR-MAA Fa2/0"
+    ],
+    "findings": [
+     {
+      "text": "The WAN router at MAA (IPLC-RTR-MAA) has its Fa2/0 interface administratively down, so the link to the TRV side (10.10.4.0/24) is not active.",
+      "evidence": [
+       "E5"
+      ]
+     },
+     {
+      "text": "The expected path from the TRV core switch to the host 192.168.200.10 goes through IPLC-RTR-MAA Fa2/0, which is currently down.",
+      "evidence": [
+       "E2"
+      ]
+     }
+    ],
+    "next_steps": [
+     {
+      "text": "Log onto IPLC-RTR-MAA and enable the Fa2/0 interface (no shutdown). Verify the interface comes up and the link status is up.",
+      "kind": "fix"
+     },
+     {
+      "text": "After the interface is up, check OSPF neighbor state on both IPLC routers (IPLC-RTR-TRV and IPLC-RTR-MAA) to ensure they become FULL.",
+      "kind": "verify"
+     },
+     {
+      "text": "Ping 192.168.200.10 from a device in the TRV LAN (e.g., 192.168.100.10) to confirm end‑to‑end connectivity.",
+      "kind": "verify"
+     }
+    ],
+    "limitations": []
+   },
+   "confidence": "medium",
+   "confidence_reasons": [
+    "root cause backed by 1 piece of evidence"
+   ],
+   "evidence": {
+    "E1": {
+     "id": "E1",
+     "tool": "get_topology_summary",
+     "device": null,
+     "summary": "8 devices in 2 sites, 6 links, 5 discovery findings",
+     "source": "graph",
+     "ok": true
+    },
+    "E2": {
+     "id": "E2",
+     "tool": "get_path",
+     "device": null,
+     "summary": "path CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA (3 hops)",
+     "source": "graph",
+     "ok": true
+    },
+    "E3": {
+     "id": "E3",
+     "tool": "get_interfaces",
+     "device": "CORE-SW-TRV",
+     "summary": "6 interfaces; all addressed interfaces up",
+     "source": "live",
+     "ok": true
+    },
+    "E4": {
+     "id": "E4",
+     "tool": "get_interfaces",
+     "device": "IPLC-RTR-TRV",
+     "summary": "6 interfaces; all addressed interfaces up",
+     "source": "live",
+     "ok": true
+    },
+    "E5": {
+     "id": "E5",
+     "tool": "get_interfaces",
+     "device": "IPLC-RTR-MAA",
+     "summary": "3 interfaces; with an address but not up: Fa2/0",
+     "source": "live",
+     "ok": true
+    }
+   },
+   "tool_calls": 5,
+   "at_ms": 154047
+  }
+ ],
+ "note": "health verdicts added afterwards from the recorded data with ainops.network.health"
+}

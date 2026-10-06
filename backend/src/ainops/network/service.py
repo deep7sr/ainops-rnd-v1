@@ -22,7 +22,7 @@ import yaml
 from pydantic import BaseModel
 
 from ainops.inventory import Device, Inventory, UnknownDeviceError
-from ainops.network import parsers
+from ainops.network import health, parsers
 from ainops.network.audit import AuditLog
 from ainops.network.executor import (
     DeviceUnreachableError,
@@ -31,6 +31,7 @@ from ainops.network.executor import (
     RawOutput,
 )
 from ainops.network.guard import CommandRefusedError
+from ainops.network.health import Health
 
 COMMANDS_FILE = Path(__file__).with_name("commands.yaml")
 
@@ -58,6 +59,7 @@ class ToolResult(BaseModel):
     platform: str
     summary: str  # one line, written by code, e.g. "2 OSPF neighbours, 1 not FULL"
     data: Any
+    health: Health  # verdict worked out by code: ok / problem (with issues) / info
     evidence: Evidence
     note: str | None = None
 
@@ -109,6 +111,7 @@ class NetworkService:
         parse: Callable[[Device, RawOutput], tuple[Any, str]],
         *,
         args: dict[str, str] | None = None,
+        assess: Callable[[Any], Health] = lambda data: health.INFO,
         tolerate_device_error: Callable[[str], tuple[Any, str] | None] | None = None,
     ) -> ToolResult:
         args = args or {}
@@ -125,6 +128,7 @@ class NetworkService:
             command = template.format(**args)
             raw = self.executor.run(device, command)
             note = None
+            verdict = health.INFO
             if raw.device_error:
                 handled = tolerate_device_error(raw.device_error) if tolerate_device_error else None
                 if handled is None:
@@ -133,6 +137,7 @@ class NetworkService:
             else:
                 try:
                     data, summary = parse(device, raw)
+                    verdict = assess(data)
                 except parsers.ParseError as error:
                     data = {"raw_excerpt": raw.text[:_RAW_EXCERPT]}
                     summary = "output returned as text (it could not be parsed)"
@@ -144,6 +149,7 @@ class NetworkService:
                 platform=device.platform,
                 summary=summary,
                 data=data,
+                health=verdict,
                 evidence=Evidence(
                     command=raw.command,
                     source=raw.source,
@@ -209,7 +215,7 @@ class NetworkService:
             )
             return rows, summary
 
-        return self._run("get_interfaces", device, "interfaces", parse)
+        return self._run("get_interfaces", device, "interfaces", parse, assess=health.interfaces)
 
     def _audit_invalid(
         self, tool: str, device: str, args: dict[str, str], error: Exception
@@ -239,7 +245,12 @@ class NetworkService:
             return detail, f"{detail.get('name') or name} is {status}; input errors {errors}"
 
         return self._run(
-            "get_interface_detail", device, "interface_detail", parse, args={"interface": name}
+            "get_interface_detail",
+            device,
+            "interface_detail",
+            parse,
+            args={"interface": name},
+            assess=lambda detail: health.interface_detail(detail, name),
         )
 
     def get_routes(self, device: str, destination: str | None = None) -> ToolResult:
@@ -264,7 +275,12 @@ class NetworkService:
                 f"{target} is reached via {best['prefix']} ({best['protocol']}) -> {via}",
             )
 
-        return self._run("get_routes", device, "routes", parse)
+        def assess(data: Any) -> Health:
+            if target is None:
+                return health.INFO
+            return health.routes_to(target, data["routes"])
+
+        return self._run("get_routes", device, "routes", parse, assess=assess)
 
     def get_ospf_neighbors(self, device: str) -> ToolResult:
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
@@ -282,7 +298,12 @@ class NetworkService:
             return None
 
         return self._run(
-            "get_ospf_neighbors", device, "ospf_neighbors", parse, tolerate_device_error=not_running
+            "get_ospf_neighbors",
+            device,
+            "ospf_neighbors",
+            parse,
+            assess=health.ospf_neighbors,
+            tolerate_device_error=not_running,
         )
 
     def get_routing_protocols(self, device: str) -> ToolResult:
@@ -343,7 +364,9 @@ class NetworkService:
                 f"({result['success_percent']}%){rtt}"
             )
 
-        return self._run("ping", device, "ping", parse, args={"destination": target})
+        return self._run(
+            "ping", device, "ping", parse, args={"destination": target}, assess=health.ping
+        )
 
     def get_firewall_policies(self, device: str) -> ToolResult:
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:

@@ -1,11 +1,15 @@
 """The code around the LLM: the agent-side safety check, the reason field and the verdict."""
 
+import asyncio
+import json
 from typing import Any
 
+from langchain.agents.middleware import ToolCallRequest
+from langchain_core.messages import ToolCall, ToolMessage
 from langchain_core.tools import StructuredTool
 
 from ainops.agent.report import EvidenceRecord, Finding, Report, verify
-from ainops.agent.runner import MAX_TOOL_CALLS, Investigation, with_reason
+from ainops.agent.runner import MAX_TOOL_CALLS, AinopsMiddleware, Investigation, with_reason
 
 
 async def _ignore(event: dict[str, Any]) -> None:
@@ -110,3 +114,58 @@ def test_failed_evidence_does_not_count() -> None:
 
 def test_inconclusive_is_low() -> None:
     assert verify(Report(outcome="inconclusive", summary="x"), {}).confidence == "low"
+
+
+def test_tool_result_event_carries_the_code_verdict_for_the_live_map() -> None:
+    events: list[dict[str, Any]] = []
+
+    async def collect(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    run = Investigation(question="Why?", emit=collect, tool_servers={"get_interfaces": "network"})
+    health = {"status": "problem", "issues": [{"text": "Fa2/0 is down", "interface": "Fa2/0"}]}
+    payload = {
+        "device": "IPLC-RTR-MAA",
+        "summary": "3 interfaces; with an address but not up: Fa2/0",
+        "data": [],
+        "health": health,
+        "evidence": {"command": "show ip interface", "source": "replay"},
+    }
+    call = ToolCall(
+        name="get_interfaces", args={"device": "IPLC-RTR-MAA", "reason": "Check MAA"}, id="c1"
+    )
+    request = ToolCallRequest(tool_call=call, tool=None, state={}, runtime=None)  # type: ignore[arg-type]
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        assert "reason" not in req.tool_call["args"]  # shown to the engineer, never sent to MCP
+        return ToolMessage(content=json.dumps(payload), tool_call_id="c1", name="get_interfaces")
+
+    message = asyncio.run(AinopsMiddleware(run).awrap_tool_call(request, handler))
+    call_event, result_event = events
+    assert call_event["why"] == "Check MAA"
+    assert result_event["health"] == health
+    assert result_event["device"] == "IPLC-RTR-MAA"
+    assert isinstance(message, ToolMessage)
+    assert '"health"' in str(message.content)  # the agent reads the verdict too
+
+
+def test_a_device_record_is_not_passed_on_as_a_device_name() -> None:
+    """find_device by name returns the whole record under "device"; the UI expects a name."""
+    events: list[dict[str, Any]] = []
+
+    async def collect(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    run = Investigation(question="Why?", emit=collect, tool_servers={"find_device": "topology"})
+    payload = {"summary": "IPLC-RTR-TRV", "device": {"name": "IPLC-RTR-TRV", "site": "TRV"}}
+    call = ToolCall(
+        name="find_device", args={"query": "IPLC-RTR-TRV", "reason": "Find it"}, id="c2"
+    )
+    request = ToolCallRequest(tool_call=call, tool=None, state={}, runtime=None)  # type: ignore[arg-type]
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content=json.dumps(payload), tool_call_id="c2", name="find_device")
+
+    asyncio.run(AinopsMiddleware(run).awrap_tool_call(request, handler))
+    assert events[1]["device"] is None
+    assert events[1]["data"] == payload  # the record itself still reaches the UI as data

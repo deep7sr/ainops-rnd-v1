@@ -1,0 +1,550 @@
+{
+ "id": "inv-26630b3d",
+ "kind": "investigation",
+ "title": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+ "started_at": "2026-10-05T15:29:13+00:00",
+ "events": [
+  {
+   "type": "started",
+   "question": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+   "tools": [
+    "find_device",
+    "get_arp_table",
+    "get_device_facts",
+    "get_device_links",
+    "get_firewall_policies",
+    "get_firewall_zones",
+    "get_interface_detail",
+    "get_interfaces",
+    "get_logs",
+    "get_neighbors",
+    "get_ospf_neighbors",
+    "get_path",
+    "get_routes",
+    "get_routing_protocols",
+    "get_topology_summary",
+    "list_devices",
+    "ping"
+   ],
+   "at_ms": 0
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "find_device"
+   ],
+   "at_ms": 1031
+  },
+  {
+   "type": "tool_call",
+   "id": "E1",
+   "tool": "find_device",
+   "server": "topology",
+   "args": {
+    "query": "192.168.200.10"
+   },
+   "why": "Identify which device/interface owns the destination IP",
+   "at_ms": 1047
+  },
+  {
+   "type": "tool_result",
+   "id": "E1",
+   "tool": "find_device",
+   "server": "topology",
+   "device": null,
+   "ok": true,
+   "summary": "192.168.200.10: address is in this interface's subnet CORE-SW-MAA E1/0",
+   "data": {
+    "summary": "192.168.200.10: address is in this interface's subnet CORE-SW-MAA E1/0",
+    "query": "192.168.200.10",
+    "ip_matches": [
+     {
+      "device": "CORE-SW-MAA",
+      "site": "MAA",
+      "interface": "E1/0",
+      "ipv4": [
+       "192.168.200.1/24"
+      ],
+      "status": "up",
+      "match": "address is in this interface's subnet",
+      "subnet": "192.168.200.0/24"
+     }
+    ],
+    "graph_as_of": "2026-10-05T12:04:35+00:00"
+   },
+   "evidence": null,
+   "duration_ms": 577,
+   "at_ms": 1625
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "find_device"
+   ],
+   "at_ms": 3141
+  },
+  {
+   "type": "tool_call",
+   "id": "E2",
+   "tool": "find_device",
+   "server": "topology",
+   "args": {
+    "query": "192.168.100.0"
+   },
+   "why": "Identify device/interface for source LAN",
+   "at_ms": 3141
+  },
+  {
+   "type": "tool_result",
+   "id": "E2",
+   "tool": "find_device",
+   "server": "topology",
+   "device": null,
+   "ok": true,
+   "summary": "192.168.100.0: address is in this interface's subnet CORE-SW-TRV E1/0",
+   "data": {
+    "summary": "192.168.100.0: address is in this interface's subnet CORE-SW-TRV E1/0",
+    "query": "192.168.100.0",
+    "ip_matches": [
+     {
+      "device": "CORE-SW-TRV",
+      "site": "TRV",
+      "interface": "E1/0",
+      "ipv4": [
+       "192.168.100.1/24"
+      ],
+      "status": "up",
+      "match": "address is in this interface's subnet",
+      "subnet": "192.168.100.0/24"
+     }
+    ],
+    "graph_as_of": "2026-10-05T12:04:35+00:00"
+   },
+   "evidence": null,
+   "duration_ms": 577,
+   "at_ms": 3719
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_path"
+   ],
+   "at_ms": 4781
+  },
+  {
+   "type": "tool_call",
+   "id": "E3",
+   "tool": "get_path",
+   "server": "topology",
+   "args": {
+    "destination": "192.168.200.10",
+    "source": "CORE-SW-TRV"
+   },
+   "why": "Find the hop-by-hop path between TRV LAN and the MAA host",
+   "at_ms": 4797
+  },
+  {
+   "type": "tool_result",
+   "id": "E3",
+   "tool": "get_path",
+   "server": "topology",
+   "device": null,
+   "ok": true,
+   "summary": "path CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA (3 hops)",
+   "data": {
+    "summary": "path CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA (3 hops)",
+    "source": "CORE-SW-TRV",
+    "destination": "CORE-SW-MAA",
+    "devices": [
+     "CORE-SW-TRV",
+     "IPLC-RTR-TRV",
+     "IPLC-RTR-MAA",
+     "CORE-SW-MAA"
+    ],
+    "hops": [
+     {
+      "from": "CORE-SW-TRV",
+      "from_interface": "Fa2/0",
+      "to": "IPLC-RTR-TRV",
+      "to_interface": "Fa0/0",
+      "subnet": "10.10.3.0/24"
+     },
+     {
+      "from": "IPLC-RTR-TRV",
+      "from_interface": "Fa2/0",
+      "to": "IPLC-RTR-MAA",
+      "to_interface": "Fa2/0",
+      "subnet": "10.10.4.0/24"
+     },
+     {
+      "from": "IPLC-RTR-MAA",
+      "from_interface": "Fa0/0",
+      "to": "CORE-SW-MAA",
+      "to_interface": "Fa2/0",
+      "subnet": "10.10.5.0/24"
+     }
+    ],
+    "notes": [
+     "destination 192.168.200.10: address is in this interface's subnet CORE-SW-MAA E1/0"
+    ],
+    "graph_as_of": "2026-10-05T12:04:35+00:00"
+   },
+   "evidence": null,
+   "duration_ms": 656,
+   "at_ms": 5453
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_interfaces"
+   ],
+   "at_ms": 14344
+  },
+  {
+   "type": "tool_call",
+   "id": "E4",
+   "tool": "get_interfaces",
+   "server": "network",
+   "args": {
+    "device": "CORE-SW-TRV"
+   },
+   "why": "Check interface status on source switch",
+   "at_ms": 14344
+  },
+  {
+   "type": "tool_result",
+   "id": "E4",
+   "tool": "get_interfaces",
+   "server": "network",
+   "device": "CORE-SW-TRV",
+   "ok": true,
+   "summary": "6 interfaces; all addressed interfaces up",
+   "data": [
+    {
+     "name": "Fa0/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.2.2/24"
+     ]
+    },
+    {
+     "name": "E1/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "192.168.100.1/24"
+     ]
+    },
+    {
+     "name": "E1/1",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/2",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/3",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "Fa2/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.3.1/24"
+     ]
+    }
+   ],
+   "evidence": {
+    "command": "show ip interface",
+    "source": "live",
+    "collected_at": "2026-10-05T15:29:34+00:00",
+    "duration_ms": 4172
+   },
+   "duration_ms": 5062,
+   "at_ms": 19406,
+   "health": {
+    "status": "ok",
+    "issues": []
+   }
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_interfaces"
+   ],
+   "at_ms": 22485
+  },
+  {
+   "type": "tool_call",
+   "id": "E5",
+   "tool": "get_interfaces",
+   "server": "network",
+   "args": {
+    "device": "IPLC-RTR-TRV"
+   },
+   "why": "Check interface status on the TRV side of the leased line",
+   "at_ms": 22500
+  },
+  {
+   "type": "tool_result",
+   "id": "E5",
+   "tool": "get_interfaces",
+   "server": "network",
+   "device": "IPLC-RTR-TRV",
+   "ok": true,
+   "summary": "6 interfaces; all addressed interfaces up",
+   "data": [
+    {
+     "name": "Fa0/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.3.2/24"
+     ]
+    },
+    {
+     "name": "E1/0",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/1",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/2",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "E1/3",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "Fa2/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.4.1/24"
+     ]
+    }
+   ],
+   "evidence": {
+    "command": "show ip interface",
+    "source": "live",
+    "collected_at": "2026-10-05T15:29:40+00:00",
+    "duration_ms": 2640
+   },
+   "duration_ms": 3266,
+   "at_ms": 25766,
+   "health": {
+    "status": "ok",
+    "issues": []
+   }
+  },
+  {
+   "type": "thought",
+   "text": "",
+   "tools": [
+    "get_interfaces"
+   ],
+   "at_ms": 51797
+  },
+  {
+   "type": "tool_call",
+   "id": "E6",
+   "tool": "get_interfaces",
+   "server": "network",
+   "args": {
+    "device": "IPLC-RTR-MAA"
+   },
+   "why": "Check interface status on MAA side of leased line",
+   "at_ms": 51813
+  },
+  {
+   "type": "tool_result",
+   "id": "E6",
+   "tool": "get_interfaces",
+   "server": "network",
+   "device": "IPLC-RTR-MAA",
+   "ok": true,
+   "summary": "3 interfaces; with an address but not up: Fa2/0",
+   "data": [
+    {
+     "name": "Fa0/0",
+     "status": "up",
+     "link": "up",
+     "protocol": "up",
+     "ipv4": [
+      "10.10.5.1/24"
+     ]
+    },
+    {
+     "name": "Fa1/0",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": []
+    },
+    {
+     "name": "Fa2/0",
+     "status": "admin-down",
+     "link": "administratively down",
+     "protocol": "down",
+     "ipv4": [
+      "10.10.4.2/24"
+     ]
+    }
+   ],
+   "evidence": {
+    "command": "show ip interface",
+    "source": "live",
+    "collected_at": "2026-10-05T15:30:09+00:00",
+    "duration_ms": 2187
+   },
+   "duration_ms": 2780,
+   "at_ms": 54594,
+   "health": {
+    "status": "problem",
+    "issues": [
+     {
+      "text": "Fa2/0 is administratively down (shut)",
+      "interface": "Fa2/0"
+     }
+    ]
+   }
+  },
+  {
+   "type": "report",
+   "report": {
+    "outcome": "diagnosed",
+    "summary": "The path from TRV to the MAA host goes through IPLC‑RTR‑MAA Fa2/0, which is admin‑down. Because the link is down, OSPF routes and traffic cannot cross the IPLC. Enabling that interface and confirming OSPF adjacency should restore connectivity.",
+    "root_cause": "The leased‑line interface on the MAA router (IPLC‑RTR‑MAA Fa2/0) is administratively shut, breaking the path between the sites.",
+    "root_cause_evidence": [
+     "E6"
+    ],
+    "affected": [
+     "IPLC-RTR-MAA Fa2/0"
+    ],
+    "findings": [
+     {
+      "text": "The interface Fa2/0 on the MAA‑side WAN router (IPLC‑RTR‑MAA) is administratively down (status: admin‑down, link: administratively down).",
+      "evidence": [
+       "E6"
+      ]
+     },
+     {
+      "text": "The matching interface Fa2/0 on the TRV‑side WAN router (IPLC‑RTR‑TRV) is up, so the link is one‑sided.",
+      "evidence": [
+       "E5"
+      ]
+     }
+    ],
+    "next_steps": [
+     {
+      "text": "Have a senior engineer enable (no shutdown) the interface Fa2/0 on IPLC‑RTR‑MAA, then verify the link comes up.",
+      "kind": "fix"
+     },
+     {
+      "text": "After the interface is up, check OSPF neighbor state between IPLC‑RTR‑TRV and IPLC‑RTR‑MAA (should be FULL).",
+      "kind": "verify"
+     },
+     {
+      "text": "Test connectivity from a host in 192.168.100.0/24 to 192.168.200.10 (ping) to confirm the issue is resolved.",
+      "kind": "verify"
+     }
+    ],
+    "limitations": []
+   },
+   "confidence": "medium",
+   "confidence_reasons": [
+    "root cause backed by 1 piece of evidence"
+   ],
+   "evidence": {
+    "E1": {
+     "id": "E1",
+     "tool": "find_device",
+     "device": null,
+     "summary": "192.168.200.10: address is in this interface's subnet CORE-SW-MAA E1/0",
+     "source": "graph",
+     "ok": true
+    },
+    "E2": {
+     "id": "E2",
+     "tool": "find_device",
+     "device": null,
+     "summary": "192.168.100.0: address is in this interface's subnet CORE-SW-TRV E1/0",
+     "source": "graph",
+     "ok": true
+    },
+    "E3": {
+     "id": "E3",
+     "tool": "get_path",
+     "device": null,
+     "summary": "path CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA (3 hops)",
+     "source": "graph",
+     "ok": true
+    },
+    "E4": {
+     "id": "E4",
+     "tool": "get_interfaces",
+     "device": "CORE-SW-TRV",
+     "summary": "6 interfaces; all addressed interfaces up",
+     "source": "live",
+     "ok": true
+    },
+    "E5": {
+     "id": "E5",
+     "tool": "get_interfaces",
+     "device": "IPLC-RTR-TRV",
+     "summary": "6 interfaces; all addressed interfaces up",
+     "source": "live",
+     "ok": true
+    },
+    "E6": {
+     "id": "E6",
+     "tool": "get_interfaces",
+     "device": "IPLC-RTR-MAA",
+     "summary": "3 interfaces; with an address but not up: Fa2/0",
+     "source": "live",
+     "ok": true
+    }
+   },
+   "tool_calls": 6,
+   "at_ms": 82297
+  }
+ ],
+ "note": "health verdicts added afterwards from the recorded data with ainops.network.health"
+}

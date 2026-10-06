@@ -185,6 +185,17 @@ export interface Evidence {
   duration_ms: number
 }
 
+/** Verdict on a tool result, worked out by code from the parsed data (backend network/health.py). */
+export interface HealthIssue {
+  text: string
+  interface: string | null
+}
+
+export interface ToolHealth {
+  status: 'ok' | 'problem' | 'info'
+  issues: HealthIssue[]
+}
+
 export interface Finding {
   text: string
   evidence: string[]
@@ -228,6 +239,7 @@ export type RunEvent =
       summary: string
       data: unknown
       evidence: Evidence | null
+      health?: ToolHealth | null // missing in runs recorded before the verdict existed
       duration_ms: number
       at_ms: number
     }

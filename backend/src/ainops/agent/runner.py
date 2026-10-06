@@ -173,6 +173,8 @@ class AinopsMiddleware(AgentMiddleware):
             payload = None
         failed = result.status == "error" or payload is None
         device = payload.get("device") if isinstance(payload, dict) else args.get("device")
+        # Only a device NAME goes on: find_device returns a whole device record under "device".
+        device = device if isinstance(device, str) else None
         summary = (
             payload.get("summary", "")
             if isinstance(payload, dict) and "summary" in payload
@@ -202,6 +204,7 @@ class AinopsMiddleware(AgentMiddleware):
                 if isinstance(payload, dict) and "data" in payload
                 else payload,  # fmt: skip
                 "evidence": payload.get("evidence") if isinstance(payload, dict) else None,
+                "health": payload.get("health") if isinstance(payload, dict) else None,
                 "duration_ms": duration_ms,
                 "at_ms": run.elapsed_ms(),
             }

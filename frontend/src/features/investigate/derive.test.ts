@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { RunEvent } from '@/api'
-import { deriveInvestigation, parseAffected, shortInterface } from './derive'
+import {
+  deriveInvestigation,
+  deviceStates,
+  parseAffected,
+  shortInterface,
+  type Step,
+} from './derive'
 
 const DEVICES = ['IPLC-RTR-TRV', 'IPLC-RTR-MAA', 'CORE-SW-MAA']
 
@@ -90,8 +96,8 @@ describe('deriveInvestigation', () => {
       ['E3', 'error'],
     ])
     expect(view.highlight.path).toEqual(['IPLC-RTR-MAA', 'IPLC-RTR-TRV'])
-    expect([...view.highlight.active]).toEqual(['IPLC-RTR-MAA']) // name normalised
-    expect(view.highlight.checked.get('IPLC-RTR-TRV')).toBe('error')
+    expect(view.highlight.states.get('IPLC-RTR-MAA')).toBe('checking') // name normalised
+    expect(view.highlight.states.get('IPLC-RTR-TRV')).toBe('unreachable')
   })
 
   it('blames only a diagnosed fault', () => {
@@ -117,4 +123,85 @@ describe('deriveInvestigation', () => {
     const view = deriveInvestigation([...events, diagnosed], DEVICES)
     expect([...view.highlight.faultInterfaces]).toEqual(['IPLC-RTR-MAA:Fa2/0'])
   })
+})
+
+describe('deviceStates', () => {
+  const base: Step = {
+    kind: 'tool',
+    key: 'E1',
+    evidenceId: 'E1',
+    tool: 'get_interfaces',
+    server: 'network',
+    args: {},
+    why: '',
+    sentence: '',
+    state: 'ok',
+    summary: '',
+    data: null,
+    evidence: null,
+    health: { status: 'ok', issues: [] },
+    device: 'IPLC-RTR-MAA',
+    durationMs: 1,
+    atMs: 1,
+  }
+  const problem = {
+    status: 'problem' as const,
+    issues: [{ text: 'Fa2/0 is down', interface: 'Fa2/0' }],
+  }
+
+  it('a problem found on a device outweighs later healthy checks', () => {
+    const states = deviceStates([
+      { ...base, health: problem },
+      { ...base, key: 'E2', tool: 'get_ospf_neighbors' },
+    ])
+    expect(states.get('IPLC-RTR-MAA')).toBe('problem')
+  })
+
+  it('a device that answered once is not unreachable', () => {
+    const states = deviceStates([
+      { ...base, state: 'error', health: null },
+      { ...base, key: 'E2' },
+    ])
+    expect(states.get('IPLC-RTR-MAA')).toBe('ok')
+  })
+
+  it('tools without a verdict only mark the device as checked', () => {
+    const states = deviceStates([
+      { ...base, tool: 'get_arp_table', health: { status: 'info', issues: [] } },
+    ])
+    expect(states.get('IPLC-RTR-MAA')).toBe('checked')
+  })
+
+  it('topology tools do not colour devices', () => {
+    expect(deviceStates([{ ...base, server: 'topology' }]).size).toBe(0)
+  })
+})
+
+it('does not crash when a result carries a device record instead of a name', () => {
+  const events = [
+    {
+      type: 'tool_call',
+      id: 'E1',
+      tool: 'find_device',
+      server: 'topology',
+      args: { query: 'IPLC-RTR-TRV' },
+      at_ms: 1,
+    },
+    {
+      type: 'tool_result',
+      id: 'E1',
+      tool: 'find_device',
+      server: 'topology',
+      device: { name: 'IPLC-RTR-TRV', site: 'TRV' },
+      ok: true,
+      summary: 'IPLC-RTR-TRV',
+      data: null,
+      evidence: null,
+      duration_ms: 5,
+      at_ms: 2,
+    },
+  ] as unknown as RunEvent[]
+  const view = deriveInvestigation(events, DEVICES)
+  expect(view.steps[0].device).toBeNull()
+  expect(view.steps[0].state).toBe('ok')
 })

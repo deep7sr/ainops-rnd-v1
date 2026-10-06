@@ -9,9 +9,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { NetworkMap } from '@/features/topology/network-map'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
-import { deriveInvestigation } from './derive'
+import { deriveInvestigation, touchesNetwork, type Now } from './derive'
+import { DevicePanel } from './device-panel'
 import { ReportCard } from './report-card'
 import { formatMs } from './format'
+import { NowBanner } from './now-banner'
 import { Timeline } from './timeline'
 
 const SUGGESTIONS = [
@@ -143,6 +145,42 @@ function Welcome() {
   )
 }
 
+function Legend() {
+  const items = [
+    { swatch: <span className="h-0.5 w-5 bg-primary" />, text: 'path the agent follows' },
+    {
+      swatch: <span className="size-3 rounded-sm border-2 border-primary bg-secondary" />,
+      text: 'being checked now',
+    },
+    {
+      swatch: (
+        <span className="size-3 rounded-sm border border-status-healthy-border bg-status-healthy-bg" />
+      ),
+      text: 'checked: healthy',
+    },
+    {
+      swatch: (
+        <span className="size-3 rounded-sm border border-status-warning-border bg-status-warning-bg" />
+      ),
+      text: 'checked: problem found',
+    },
+    {
+      swatch: <span className="h-0.5 w-5 border-t-2 border-dashed border-status-critical" />,
+      text: 'root cause',
+    },
+    { swatch: <span className="size-2.5 rounded-full bg-primary" />, text: 'ping in flight' },
+  ]
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      {items.map(({ swatch, text }) => (
+        <li key={text} className="flex items-center gap-1.5">
+          {swatch} {text}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function Run({ runId }: { runId: string }) {
   const { events, done, error } = useRunEvents(runId)
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
@@ -152,8 +190,11 @@ function Run({ runId }: { runId: string }) {
   )
   const view = useMemo(() => deriveInvestigation(events, deviceNames), [events, deviceNames])
   const [focused, setFocused] = useState<string | null>(null)
+  const [panelDevice, setPanelDevice] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
   const running = !done && !view.verdict && !view.error && !error
+  const now: Now =
+    error && view.now.kind !== 'done' ? { kind: 'stopped', message: error } : view.now
 
   // Follow the live steps while the investigation runs.
   useEffect(() => {
@@ -161,106 +202,109 @@ function Run({ runId }: { runId: string }) {
   }, [view.steps.length, running])
 
   const selectEvidence = (id: string) => {
+    setPanelDevice(null)
     setFocused(id)
     document.getElementById(`step-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
   const topologyCalls = view.steps.filter((s) => s.server === 'topology').length
   const networkCalls = view.steps.filter((s) => s.server === 'network').length
   const refusals = view.steps.filter((s) => s.kind === 'refused').length
+  const device = topology.data?.devices.find((d) => d.name === panelDevice) ?? null
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-      <div className="min-h-0 overflow-y-auto px-6 py-5">
-        <div className="mx-auto max-w-3xl space-y-5">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">Question</p>
-            <h1 className="text-lg font-semibold text-balance">{view.question ?? '…'}</h1>
-          </div>
-
-          {view.steps.length === 0 && running && (
-            <div className="space-y-3" aria-label="Starting">
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2
-                  aria-hidden="true"
-                  className="size-4 animate-spin motion-reduce:animate-none"
-                />
-                The agent is reading the question and choosing its first tool…
-              </p>
-              <Skeleton className="h-16 w-full" />
-            </div>
-          )}
-
-          <Timeline steps={view.steps} focused={focused} />
-
-          {running && view.steps.length > 0 && view.steps.every((s) => s.state !== 'running') && (
-            <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">
-              <Sparkles aria-hidden="true" className="size-3.5" />
-              Reading the evidence and deciding the next step…
-            </p>
-          )}
-
-          {(view.error ?? error) && (
-            <p
-              role="alert"
-              className="rounded-md border border-status-critical-border bg-status-critical-bg px-4 py-3 text-sm text-status-critical"
-            >
-              {view.error ?? error}
-            </p>
-          )}
-
-          {view.verdict && <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />}
-          <div ref={bottom} />
-          {!running && <QuestionBox compact />}
+    <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="min-h-0 space-y-4 overflow-y-auto px-6 py-5 lg:border-r">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">Question</p>
+          <h1 className="text-lg font-semibold text-balance">{view.question ?? '…'}</h1>
         </div>
+
+        <NowBanner now={now} stepCount={view.steps.length} />
+
+        {/* The map appears once the agent looks at the network: a greeting or a refusal has
+            nothing to show on it. */}
+        {touchesNetwork(view.steps) && (
+          <>
+            <div className="rounded-lg border bg-card p-2">
+              {topology.data ? (
+                <NetworkMap
+                  topology={topology.data}
+                  highlight={view.highlight}
+                  showEdges={false}
+                  selected={panelDevice}
+                  onSelect={(key) => {
+                    if (deviceNames.includes(key)) setPanelDevice(key)
+                  }}
+                />
+              ) : (
+                <Skeleton className="aspect-[1000/560] w-full" />
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Legend />
+              <p className="text-xs text-muted-foreground">
+                Click a device to see what was found on it.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              {[
+                { icon: Network, label: 'Topology MCP calls', value: topologyCalls },
+                { icon: Router, label: 'Network MCP calls', value: networkCalls },
+                { icon: ShieldCheck, label: 'Blocked by safety check', value: refusals },
+              ].map(({ icon: Icon, label, value }) => (
+                <div key={label} className="rounded-md border bg-card px-3 py-2">
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Icon aria-hidden="true" className="size-3.5" /> {label}
+                  </p>
+                  <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {view.verdict && <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />}
       </div>
 
-      <aside className="hidden min-h-0 flex-col gap-3 border-l bg-muted/30 px-5 py-5 xl:flex">
-        <div className="flex items-center justify-between">
+      <aside
+        aria-label="Steps of the investigation"
+        className="min-h-0 overflow-y-auto bg-muted/30 px-5 py-5"
+      >
+        <div className="mb-3 flex items-center justify-between">
           <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
-            Live view of the investigation
+            What the agent did, step by step
           </p>
           <p className="text-xs text-muted-foreground">
-            {view.verdict ? `done in ${formatMs(view.verdict.atMs)}` : running ? 'running' : ''}
+            {view.verdict ? `done in ${formatMs(view.verdict.atMs)}` : running ? 'live' : ''}
           </p>
         </div>
-        <div className="rounded-lg border bg-card p-2">
-          {topology.data ? (
-            <NetworkMap topology={topology.data} highlight={view.highlight} showEdges={false} />
-          ) : (
-            <Skeleton className="aspect-[1000/560] w-full" />
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-sm">
-          {[
-            { icon: Network, label: 'Topology MCP calls', value: topologyCalls },
-            { icon: Router, label: 'Network MCP calls', value: networkCalls },
-            { icon: ShieldCheck, label: 'Blocked by safety check', value: refusals },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="rounded-md border bg-card px-3 py-2">
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Icon aria-hidden="true" className="size-3.5" /> {label}
-              </p>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
-            </div>
-          ))}
-        </div>
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <li className="flex items-center gap-1.5">
-            <span className="h-0.5 w-5 bg-primary" /> path the agent follows
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="size-3 rounded-sm border-2 border-primary" /> being checked
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="size-3 rounded-sm border border-status-healthy-border bg-status-healthy-bg" />{' '}
-            checked
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="h-0.5 w-5 border-t-2 border-dashed border-status-critical" /> root
-            cause
-          </li>
-        </ul>
+
+        {view.steps.length === 0 && running && <Skeleton className="h-16 w-full" />}
+
+        <Timeline steps={view.steps} focused={focused} onSelectDevice={setPanelDevice} />
+
+        {running && view.steps.length > 0 && view.steps.every((s) => s.state !== 'running') && (
+          <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">
+            <Sparkles aria-hidden="true" className="size-3.5" />
+            Reading the evidence and deciding the next step…
+          </p>
+        )}
+        <div ref={bottom} />
+        {!running && (
+          <div className="mt-4">
+            <QuestionBox compact />
+          </div>
+        )}
       </aside>
+
+      <DevicePanel
+        device={device}
+        state={device ? view.highlight.states.get(device.name) : undefined}
+        issues={device ? (view.highlight.issues.get(device.name) ?? []) : []}
+        steps={view.steps}
+        onClose={() => setPanelDevice(null)}
+        onSelectEvidence={selectEvidence}
+      />
     </div>
   )
 }

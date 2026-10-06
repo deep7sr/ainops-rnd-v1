@@ -7,6 +7,7 @@ import {
   Router,
   ShieldX,
   Sparkles,
+  TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -25,7 +26,17 @@ function argText(args: Record<string, unknown>): string {
     .join(' ')
 }
 
-function StepItem({ step, focused, last }: { step: Step; focused: boolean; last: boolean }) {
+function StepItem({
+  step,
+  focused,
+  last,
+  onSelectDevice,
+}: {
+  step: Step
+  focused: boolean
+  last: boolean
+  onSelectDevice?: (device: string) => void
+}) {
   const [open, setOpen] = useState(false)
   const Icon = step.kind === 'refused' ? ShieldX : (SERVER_ICON[step.server] ?? Router)
   const details = argText(step.args)
@@ -54,10 +65,14 @@ function StepItem({ step, focused, last }: { step: Step; focused: boolean; last:
           focused ? 'border-primary bg-secondary/60' : 'border-transparent',
         )}
       >
+        <p className="text-sm font-medium">{step.sentence}</p>
         {step.why && (
-          <p className="flex items-start gap-1.5 text-sm text-provenance-ai">
+          <p className="mt-0.5 flex items-start gap-1.5 text-sm text-provenance-ai">
             <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-            <span>{step.why}</span>
+            <span>
+              <span className="font-semibold">Why: </span>
+              {step.why}
+            </span>
           </p>
         )}
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -76,7 +91,18 @@ function StepItem({ step, focused, last }: { step: Step; focused: boolean; last:
           <code className="rounded bg-muted px-1.5 py-px font-mono text-[11.5px] text-foreground">
             {step.tool}
           </code>
-          {step.device && <span className="font-medium text-foreground">{step.device}</span>}
+          {step.device &&
+            (onSelectDevice ? (
+              <button
+                type="button"
+                onClick={() => onSelectDevice(step.device as string)}
+                className="rounded font-medium text-foreground underline-offset-2 hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                {step.device}
+              </button>
+            ) : (
+              <span className="font-medium text-foreground">{step.device}</span>
+            ))}
           {details && <span className="font-mono">{details}</span>}
         </div>
 
@@ -86,6 +112,11 @@ function StepItem({ step, focused, last }: { step: Step; focused: boolean; last:
               <Loader2
                 aria-hidden="true"
                 className="mt-0.5 size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+              />
+            ) : step.state === 'ok' && step.health?.status === 'problem' ? (
+              <TriangleAlert
+                aria-hidden="true"
+                className="mt-0.5 size-4 shrink-0 text-status-warning"
               />
             ) : step.state === 'ok' ? (
               <CircleCheck
@@ -97,6 +128,11 @@ function StepItem({ step, focused, last }: { step: Step; focused: boolean; last:
             )}
             <span className={cn(step.state === 'running' && 'text-muted-foreground')}>
               {step.state === 'running' ? 'Running…' : step.summary}
+              {step.health?.status === 'problem' && (
+                <span className="block font-medium text-status-warning">
+                  Problem found: {step.health.issues.map((i) => i.text).join('; ')}
+                </span>
+              )}
             </span>
           </p>
           <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
@@ -152,7 +188,15 @@ function StepItem({ step, focused, last }: { step: Step; focused: boolean; last:
   )
 }
 
-export function Timeline({ steps, focused }: { steps: Step[]; focused: string | null }) {
+export function Timeline({
+  steps,
+  focused,
+  onSelectDevice,
+}: {
+  steps: Step[]
+  focused: string | null
+  onSelectDevice?: (device: string) => void
+}) {
   return (
     <ol aria-label="Investigation steps">
       {steps.map((step, index) => (
@@ -161,6 +205,7 @@ export function Timeline({ steps, focused }: { steps: Step[]; focused: string | 
           step={step}
           focused={focused !== null && focused === step.evidenceId}
           last={index === steps.length - 1}
+          onSelectDevice={onSelectDevice}
         />
       ))}
     </ol>

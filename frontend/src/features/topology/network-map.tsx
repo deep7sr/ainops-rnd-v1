@@ -1,12 +1,20 @@
 // The network as one SVG, drawn from the knowledge graph. During an investigation it also shows
-// what the agent is doing: the path it found, the device it is checking right now, the devices it
-// has checked, and the fault it blames. Colour is never the only signal: states also have icons,
-// labels and line styles.
+// what the agent is doing, only from real events: the path it found (drawn hop by hop), the device
+// it is checking right now and with which tool, the verdict on every device it checked (computed
+// by code), the packets of its pings, and the fault it blames. Devices that do not matter fade.
+// Colour is never the only signal: states also have icons, labels and line styles.
 
-import { CircleCheck, Loader2, TriangleAlert } from 'lucide-react'
+import { CircleCheck, CircleX, Loader2, TriangleAlert } from 'lucide-react'
+import { useSyncExternalStore, type CSSProperties } from 'react'
 import type { GraphDevice, GraphLink, Topology } from '@/api'
 import { cn } from '@/lib/utils'
-import { NO_HIGHLIGHT, type MapHighlight } from './highlight'
+import {
+  boxIssue,
+  NO_HIGHLIGHT,
+  type DeviceState,
+  type MapHighlight,
+  type MapPing,
+} from './highlight'
 import {
   edgeInterfaces,
   edgePoint,
@@ -21,24 +29,44 @@ import {
   type Point,
 } from './layout'
 
-function onPath(link: GraphLink, path: string[]): boolean {
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
+
+function subscribeMotion(onChange: () => void) {
+  const query = typeof window.matchMedia === 'function' ? window.matchMedia(REDUCED_MOTION) : null
+  query?.addEventListener('change', onChange)
+  return () => query?.removeEventListener('change', onChange)
+}
+
+/** SVG motion (the ping packets) is not covered by CSS `motion-reduce`, so ask the browser. */
+function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    subscribeMotion,
+    () => typeof window.matchMedia === 'function' && window.matchMedia(REDUCED_MOTION).matches,
+    () => false,
+  )
+}
+
+/** Index of the hop this link is on (0 = first hop of the path), or -1. */
+function hopIndex(link: GraphLink, path: string[]): number {
   for (let i = 0; i < path.length - 1; i++) {
     const pair = [path[i], path[i + 1]]
-    if (pair.includes(link.a) && pair.includes(link.b)) return true
+    if (pair.includes(link.a) && pair.includes(link.b)) return i
   }
-  return false
+  return -1
 }
 
 function LinkLine({
   link,
   positions,
   highlight,
+  investigating,
   selected,
   onSelect,
 }: {
   link: GraphLink
   positions: Map<string, Point>
   highlight: MapHighlight
+  investigating: boolean
   selected: boolean
   onSelect?: (key: string) => void
 }) {
@@ -52,7 +80,9 @@ function LinkLine({
     highlight.faultInterfaces.has(`${link.a}:${link.a_interface}`) ||
     highlight.faultInterfaces.has(`${link.b}:${link.b_interface}`)
   const down = linkIsDown(link)
-  const inPath = onPath(link, highlight.path)
+  const hop = hopIndex(link, highlight.path)
+  const inPath = hop >= 0
+  const faded = investigating && !inPath && !fault
   // Interface names at both ends, only where there is room (short links would cover the subnet).
   const length = Math.hypot(end.x - start.x, end.y - start.y)
   const showEnds = (fault || inPath || selected) && length > 150
@@ -61,15 +91,20 @@ function LinkLine({
     x: start.x + (end.x - start.x) * t,
     y: start.y + (end.y - start.y) * t,
   })
+  const evidence = highlight.faultEvidence.length ? ` · ${highlight.faultEvidence.join(', ')}` : ''
 
   return (
     <g
       role={onSelect ? 'button' : undefined}
       tabIndex={onSelect ? 0 : undefined}
       aria-label={`Link ${link.a} ${link.a_interface} to ${link.b} ${link.b_interface}, ${label}${
-        fault ? ', blamed by the diagnosis' : down ? ', down' : ''
+        fault ? ', blamed by the diagnosis' : down ? ', down' : inPath ? ', on the path' : ''
       }`}
-      className={cn(onSelect && 'cursor-pointer focus-visible:outline-none')}
+      className={cn(
+        'transition-opacity duration-500',
+        faded && 'opacity-35',
+        onSelect && 'cursor-pointer focus-visible:outline-none',
+      )}
       onClick={() => onSelect?.(link.key)}
       onKeyDown={(event) => {
         if (onSelect && (event.key === 'Enter' || event.key === ' ')) {
@@ -86,6 +121,17 @@ function LinkLine({
         strokeWidth={16}
         className="stroke-transparent"
       />
+      {inPath && !fault && (
+        // The plain line under the drawn one, so the link never disappears while it draws.
+        <line
+          x1={start.x}
+          y1={start.y}
+          x2={end.x}
+          y2={end.y}
+          strokeWidth={2}
+          className="stroke-muted-foreground/40"
+        />
+      )}
       <line
         x1={start.x}
         y1={start.y}
@@ -93,15 +139,19 @@ function LinkLine({
         y2={end.y}
         strokeWidth={fault ? 4 : inPath ? 3.5 : 2}
         strokeDasharray={fault || down ? '9 6' : undefined}
+        style={
+          inPath && !fault
+            ? ({ '--len': `${Math.ceil(length)}`, '--delay': `${hop * 350}ms` } as CSSProperties)
+            : undefined
+        }
         className={cn(
           'transition-[stroke] duration-300',
+          inPath && !fault && !down && 'path-draw',
           fault || down
             ? 'stroke-status-critical'
-            : inPath
+            : inPath || selected
               ? 'stroke-primary'
-              : selected
-                ? 'stroke-primary'
-                : 'stroke-muted-foreground/40',
+              : 'stroke-muted-foreground/40',
         )}
       />
       <g transform={`translate(${mid.x}, ${mid.y})`}>
@@ -148,42 +198,79 @@ function LinkLine({
       {fault && (
         <text
           x={mid.x}
-          y={mid.y + 24}
+          y={mid.y + 25}
           textAnchor="middle"
           className="fill-status-critical text-[11px] font-semibold"
         >
-          Root cause
+          Root cause{evidence}
         </text>
       )}
     </g>
   )
 }
 
+interface PingNote {
+  device: string
+  text: string
+  ok: boolean
+}
+
+const STATE_LABEL: Record<DeviceState, string> = {
+  checking: 'being checked now',
+  ok: 'checked, healthy',
+  problem: 'checked, problem found',
+  unreachable: 'did not answer',
+  checked: 'checked',
+}
+
 function DeviceBox({
   device,
   at,
   highlight,
+  investigating,
+  note,
   selected,
   onSelect,
 }: {
   device: GraphDevice
   at: Point
   highlight: MapHighlight
+  investigating: boolean
+  note: PingNote | null
   selected: boolean
   onSelect?: (name: string) => void
 }) {
-  const active = highlight.active.has(device.name)
-  const checked = highlight.checked.get(device.name)
+  const state = highlight.states.get(device.name)
+  const issues = highlight.issues.get(device.name) ?? []
   const fault = highlight.faultDevices.has(device.name)
+  const checking = state === 'checking'
   const inPath = highlight.path.includes(device.name)
-  const state = fault ? 'fault' : active ? 'checking' : checked ? `checked (${checked})` : 'idle'
+  const faded = investigating && !inPath && !state && !fault
+  const caption = highlight.caption?.device === device.name ? highlight.caption.label : null
+  const detail = checking
+    ? `${caption ?? 'checking'}…`
+    : issues.length
+      ? boxIssue(issues[0])
+      : note
+        ? note.text
+        : state === 'unreachable'
+          ? 'did not answer'
+          : `${device.role.replace('-', ' ')} · ${device.platform === 'juniper_junos' ? 'Junos' : 'IOS'}`
+  const spoken = fault ? 'root cause' : state ? STATE_LABEL[state] : inPath ? 'on the path' : ''
+  const extra = note && !checking && !issues.length ? [note.text] : []
 
   return (
     <g
       role={onSelect ? 'button' : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      aria-label={`${device.name}, ${device.role}, ${state}`}
-      className={cn(onSelect && 'cursor-pointer focus-visible:outline-none')}
+      aria-label={[device.name, device.role, spoken, ...issues, ...extra]
+        .filter(Boolean)
+        .join(', ')}
+      className={cn(
+        'transition-opacity duration-500',
+        faded && 'opacity-35',
+        onSelect && 'cursor-pointer focus-visible:outline-none',
+      )}
       onClick={() => onSelect?.(device.name)}
       onKeyDown={(event) => {
         if (onSelect && (event.key === 'Enter' || event.key === ' ')) {
@@ -193,15 +280,16 @@ function DeviceBox({
       }}
       transform={`translate(${at.x - NODE_WIDTH / 2}, ${at.y - NODE_HEIGHT / 2})`}
     >
-      {active && (
+      <title>{[device.name, spoken, ...issues].filter(Boolean).join(' · ')}</title>
+      {checking && (
         // A real state (a command is running on this device), so it may move; still when reduced
         // motion is asked for.
         <rect
-          x={-5}
-          y={-5}
-          width={NODE_WIDTH + 10}
-          height={NODE_HEIGHT + 10}
-          rx={9}
+          x={-6}
+          y={-6}
+          width={NODE_WIDTH + 12}
+          height={NODE_HEIGHT + 12}
+          rx={10}
           className="animate-pulse fill-none stroke-primary stroke-2 motion-reduce:animate-none"
         />
       )}
@@ -209,44 +297,101 @@ function DeviceBox({
         width={NODE_WIDTH}
         height={NODE_HEIGHT}
         rx={6}
-        strokeWidth={fault || active || selected ? 2.5 : inPath ? 2 : 1.25}
+        strokeWidth={fault || checking || selected ? 2.5 : inPath || state ? 2 : 1.25}
         className={cn(
           'transition-[fill,stroke] duration-300',
           fault
             ? 'fill-status-critical-bg stroke-status-critical'
-            : active
+            : checking
               ? 'fill-secondary stroke-primary'
-              : checked === 'ok'
-                ? 'fill-status-healthy-bg stroke-status-healthy-border'
-                : checked === 'error'
-                  ? 'fill-status-warning-bg stroke-status-warning-border'
-                  : inPath || selected
-                    ? 'fill-card stroke-primary'
-                    : 'fill-card stroke-border',
+              : state === 'problem'
+                ? 'fill-status-warning-bg stroke-status-warning-border'
+                : state === 'ok'
+                  ? 'fill-status-healthy-bg stroke-status-healthy-border'
+                  : state === 'unreachable'
+                    ? 'fill-status-unknown-bg stroke-status-unknown-border'
+                    : inPath || selected || state === 'checked'
+                      ? 'fill-card stroke-primary'
+                      : 'fill-card stroke-border',
         )}
       />
       <foreignObject x={NODE_WIDTH - 24} y={7} width={17} height={17}>
         {fault ? (
           <TriangleAlert aria-hidden="true" className="size-4 text-status-critical" />
-        ) : active ? (
+        ) : checking ? (
           <Loader2
             aria-hidden="true"
             className="size-4 animate-spin text-primary motion-reduce:animate-none"
           />
-        ) : checked === 'ok' ? (
-          <CircleCheck aria-hidden="true" className="size-4 text-status-healthy" />
-        ) : checked === 'error' ? (
+        ) : state === 'problem' ? (
           <TriangleAlert aria-hidden="true" className="size-4 text-status-warning" />
+        ) : state === 'ok' ? (
+          <CircleCheck aria-hidden="true" className="size-4 text-status-healthy" />
+        ) : state === 'unreachable' ? (
+          <CircleX aria-hidden="true" className="size-4 text-status-unknown" />
+        ) : state === 'checked' ? (
+          <CircleCheck aria-hidden="true" className="size-4 text-muted-foreground" />
         ) : null}
       </foreignObject>
       <text x={11} y={23} className="fill-foreground text-[13px] font-semibold">
         {device.name}
       </text>
-      <text x={11} y={41} className="fill-muted-foreground text-[11px]">
-        {device.role.replace('-', ' ')} · {device.platform === 'juniper_junos' ? 'Junos' : 'IOS'}
-      </text>
+      <foreignObject x={11} y={31} width={NODE_WIDTH - 20} height={18}>
+        <div
+          className={cn(
+            'truncate text-[11px] leading-[18px]',
+            fault
+              ? 'font-semibold text-status-critical'
+              : checking
+                ? 'font-medium text-primary'
+                : issues.length
+                  ? 'font-semibold text-status-warning'
+                  : note
+                    ? cn('font-semibold', note.ok ? 'text-status-healthy' : 'text-status-critical')
+                    : 'text-muted-foreground',
+          )}
+        >
+          {detail}
+        </div>
+      </foreignObject>
     </g>
   )
+}
+
+/** A packet travelling the ping's route while it runs (its result is then shown in a box). */
+function PingPacket({
+  ping,
+  positions,
+  reducedMotion,
+}: {
+  ping: MapPing
+  positions: Map<string, Point>
+  reducedMotion: boolean
+}) {
+  const points = ping.route.map((name) => positions.get(name)).filter((p): p is Point => !!p)
+  if (points.length === 0) return null
+  const route = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+
+  if (ping.ok === null) {
+    if (points.length < 2) return null // the way is unknown: the device caption says "pinging"
+    const middle = points[Math.floor(points.length / 2)]
+    return (
+      <g aria-label={`Ping to ${ping.destination} in flight`}>
+        {reducedMotion ? (
+          <circle cx={middle.x} cy={middle.y} r={6} className="fill-primary" />
+        ) : (
+          <circle r={6} className="fill-primary stroke-card stroke-2">
+            <animateMotion
+              dur={`${Math.max(points.length - 1, 1) * 0.9}s`}
+              repeatCount="indefinite"
+              path={route}
+            />
+          </circle>
+        )}
+      </g>
+    )
+  }
+  return null
 }
 
 export function NetworkMap({
@@ -264,16 +409,31 @@ export function NetworkMap({
   showEdges?: boolean
   className?: string
 }) {
+  const reducedMotion = usePrefersReducedMotion()
   const positions = layoutDevices(topology.devices)
   const sites = siteOrder(topology.devices)
   const columnWidth = VIEW_WIDTH / Math.max(sites.length, 1)
   const edges = showEdges ? edgeInterfaces(topology.devices, topology.links) : []
+  // Once the agent has found its path, what is not on it fades (it cannot matter).
+  const investigating = highlight.path.length > 0
   // Without the edge labels, zoom to the devices so the map is readable in a narrow panel.
   const xs = [...positions.values()].map((p) => p.x)
   const zoom = !showEdges && xs.length > 0
   const viewLeft = zoom ? Math.max(0, Math.min(...xs) - NODE_WIDTH / 2 - 40) : 0
   const viewRight = zoom ? Math.min(VIEW_WIDTH, Math.max(...xs) + NODE_WIDTH / 2 + 40) : VIEW_WIDTH
   const viewBox = `${viewLeft} 0 ${viewRight - viewLeft} ${VIEW_HEIGHT}`
+  // The latest answered ping is written in a device box: in the target's box when it replied, in
+  // the sender's box when it did not (a ping alone does not tell where the packet was lost).
+  const answered = highlight.pings.filter((p) => p.ok !== null).at(-1)
+  const note: PingNote | null = answered
+    ? {
+        device: answered.ok ? answered.route[answered.route.length - 1] : answered.from,
+        text: answered.ok
+          ? `✓ ${answered.destination} replied`
+          : `✕ no reply from ${answered.destination}`,
+        ok: answered.ok === true,
+      }
+    : null
 
   return (
     <svg
@@ -354,6 +514,7 @@ export function NetworkMap({
           link={link}
           positions={positions}
           highlight={highlight}
+          investigating={investigating}
           selected={selected === link.key}
           onSelect={onSelect}
         />
@@ -366,11 +527,21 @@ export function NetworkMap({
             device={device}
             at={at}
             highlight={highlight}
+            investigating={investigating}
+            note={note?.device === device.name ? note : null}
             selected={selected === device.name}
             onSelect={onSelect}
           />
         ) : null
       })}
+      {highlight.pings.map((ping) => (
+        <PingPacket
+          key={ping.key}
+          ping={ping}
+          positions={positions}
+          reducedMotion={reducedMotion}
+        />
+      ))}
     </svg>
   )
 }

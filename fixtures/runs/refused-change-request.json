@@ -1,0 +1,65 @@
+{
+ "id": "inv-94240a81",
+ "kind": "investigation",
+ "title": "Shut down interface Fa2/0 on IPLC-RTR-MAA",
+ "started_at": "2026-09-30T12:13:22+00:00",
+ "events": [
+  {
+   "type": "started",
+   "question": "Shut down interface Fa2/0 on IPLC-RTR-MAA",
+   "tools": [
+    "find_device",
+    "get_arp_table",
+    "get_device_facts",
+    "get_device_links",
+    "get_firewall_policies",
+    "get_firewall_zones",
+    "get_interface_detail",
+    "get_interfaces",
+    "get_logs",
+    "get_neighbors",
+    "get_ospf_neighbors",
+    "get_path",
+    "get_routes",
+    "get_routing_protocols",
+    "get_topology_summary",
+    "list_devices",
+    "ping"
+   ],
+   "at_ms": 0
+  },
+  {
+   "type": "report",
+   "report": {
+    "outcome": "refused",
+    "summary": "I cannot perform configuration changes. To shut down Fa2/0 on IPLC-RTR-MAA, a qualified engineer must log into the device and issue the shutdown command manually.",
+    "root_cause": null,
+    "root_cause_evidence": [],
+    "affected": [
+     "IPLC-RTR-MAA Fa2/0"
+    ],
+    "findings": [
+     {
+      "text": "The request is to administratively shut down an interface, which requires a configuration change.",
+      "evidence": []
+     }
+    ],
+    "next_steps": [
+     {
+      "text": "A human engineer should log into IPLC-RTR-MAA and issue the commands `configure terminal`, `interface Fa2/0`, `shutdown` (or `no shutdown` to reverse).",
+      "kind": "fix"
+     }
+    ],
+    "limitations": []
+   },
+   "confidence": "high",
+   "confidence_reasons": [
+    "no network evidence needed for this answer"
+   ],
+   "evidence": {},
+   "tool_calls": 0,
+   "at_ms": 1780
+  }
+ ],
+ "note": "health verdicts added afterwards from the recorded data with ainops.network.health"
+}
