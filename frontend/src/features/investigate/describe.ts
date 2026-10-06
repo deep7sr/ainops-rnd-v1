@@ -19,6 +19,8 @@ const SENTENCES: Record<string, (args: Args) => string> = {
   get_interfaces: (a) => `Checking the interfaces of ${arg(a, 'device')}`,
   get_interface_detail: (a) =>
     `Checking ${arg(a, 'interface')} on ${arg(a, 'device')} for errors and flaps`,
+  trace_route: (a) =>
+    `Following the routing tables from ${arg(a, 'source')} to ${arg(a, 'destination')}`,
   get_routes: (a) =>
     `Checking the routing table of ${arg(a, 'device')}${
       a.destination ? ` for ${arg(a, 'destination')}` : ''
@@ -44,6 +46,7 @@ export function shortCall(tool: string): string {
     get_interfaces: 'checking interfaces',
     get_interface_detail: 'checking an interface',
     get_routes: 'checking routes',
+    trace_route: 'tracing the route',
     get_ospf_neighbors: 'checking OSPF',
     get_routing_protocols: 'checking routing',
     get_neighbors: 'checking neighbours',

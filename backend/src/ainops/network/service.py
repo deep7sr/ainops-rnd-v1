@@ -22,7 +22,7 @@ import yaml
 from pydantic import BaseModel
 
 from ainops.inventory import Device, Inventory, UnknownDeviceError
-from ainops.network import health, parsers
+from ainops.network import health, parsers, trace
 from ainops.network.audit import AuditLog
 from ainops.network.executor import (
     DeviceUnreachableError,
@@ -31,7 +31,7 @@ from ainops.network.executor import (
     RawOutput,
 )
 from ainops.network.guard import CommandRefusedError
-from ainops.network.health import Health
+from ainops.network.health import Health, Issue
 
 COMMANDS_FILE = Path(__file__).with_name("commands.yaml")
 
@@ -64,6 +64,17 @@ class ToolResult(BaseModel):
     note: str | None = None
 
 
+class TraceResult(BaseModel):
+    """trace_route: one result for the whole walk; `data.hops` has one entry per device."""
+
+    device: str  # where the walk started
+    site: str
+    summary: str
+    data: dict[str, Any]
+    health: Health
+    evidence: Evidence
+
+
 def load_commands(path: Path = COMMANDS_FILE) -> dict[str, dict[str, str]]:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     return {platform: dict(commands) for platform, commands in raw.items()}
@@ -94,6 +105,8 @@ class NetworkService:
     executor: Executor
     audit: AuditLog
     commands: dict[str, dict[str, str]]
+    # Which device owns an IP address (GraphStore.owner_of_ip); only trace_route needs it.
+    locate: trace.Locate | None = None
 
     # ---------- plumbing ----------
 
@@ -385,3 +398,117 @@ class NetworkService:
             return rows, text or "no security zones"
 
         return self._run("get_firewall_zones", device, "firewall_zones", parse)
+
+    def trace_route(self, source: str, destination: str) -> TraceResult:
+        args = {"source": source, "destination": destination}
+        started = time.monotonic()
+        try:
+            target = validate_ipv4(destination, what="destination")
+            start, start_note = self._trace_start(source)
+        except ToolFailure as error:
+            self._audit_invalid("trace_route", source, args, error)
+            raise
+
+        def read(name: str) -> trace.TableRead:
+            try:
+                result = self.get_routes(name)
+            except ToolFailure as error:
+                return trace.TableRead(name, "", None, "", self.executor.mode, 0, str(error))
+            rows = result.data if isinstance(result.data, list) else None
+            return trace.TableRead(
+                device=result.device,
+                site=result.site,
+                rows=rows,
+                command=result.evidence.command,
+                source=result.evidence.source,
+                duration_ms=result.evidence.duration_ms,
+                error=None if rows is not None else result.note,
+            )
+
+        try:
+            walked = trace.walk(start, target, read, self._locate)
+        except ToolFailure as error:
+            self._audit_invalid("trace_route", start, args, error)
+            raise
+        sources = {h["source"] for h in walked.hops}
+        result = TraceResult(
+            device=walked.hops[0]["device"],
+            site=walked.hops[0]["site"],
+            summary=walked.summary,
+            data={
+                "source": source,
+                "destination": target,
+                "start_note": start_note,
+                "status": walked.status,
+                "stopped_at": walked.stopped_at,
+                "path": [h["device"] for h in walked.hops],
+                "hops": walked.hops,
+            },
+            health=_trace_health(walked, target),
+            evidence=Evidence(
+                command="; ".join(dict.fromkeys(h["command"] for h in walked.hops if h["command"])),
+                source="live" if "live" in sources else "replay",
+                collected_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                duration_ms=int((time.monotonic() - started) * 1000),
+            ),
+        )
+        self.audit.write(
+            tool="trace_route",
+            device=result.device,
+            args=args,
+            command=None,
+            outcome="ok",
+            summary=result.summary,
+            source=result.evidence.source,
+            duration_ms=result.evidence.duration_ms,
+        )
+        return result
+
+    def _locate(self, address: str) -> list[dict[str, Any]]:
+        if self.locate is None:
+            raise ToolFailure(
+                "trace_route needs the knowledge graph to know which device owns an address"
+            )
+        try:
+            return self.locate(address)
+        except Exception as error:  # the graph driver raises its own errors
+            raise ToolFailure(f"the knowledge graph could not be read: {error}") from error
+
+    def _trace_start(self, source: str) -> tuple[str, str | None]:
+        """A device name, or the device whose network holds the source address (its gateway)."""
+        text = source.strip()
+        try:
+            address = str(ipaddress.ip_interface(text).ip)
+        except ValueError:
+            return self._device(text).name, None
+        validate_ipv4(address, what="source")
+        rows = self._locate(address)
+        owners = trace.owner(lambda _: rows, address)
+        if owners:
+            return owners, None
+        gateways = {str(r["device"]): r for r in rows}
+        if not gateways:
+            raise ToolFailure(f"no device in the knowledge graph has {address} in its networks")
+        if len(gateways) > 1:
+            names = ", ".join(sorted(gateways))
+            raise ToolFailure(
+                f"{address} is in a network shared by {names}: give the device to start from"
+            )
+        name, row = next(iter(gateways.items()))
+        return name, f"{address} is on {name}'s network {row['subnet']} ({row['interface']})"
+
+
+def _trace_health(walked: trace.Trace, destination: str) -> Health:
+    if walked.status == "reached":
+        return Health(status="ok")
+    if walked.status == "no_route":
+        return Health(
+            status="problem",
+            issues=[Issue(text=f"{walked.stopped_at} has no route to {destination}")],
+        )
+    if walked.status == "loop":
+        return Health(
+            status="problem",
+            issues=[Issue(text=f"routing loop: {walked.stopped_at} sends {destination} back")],
+        )
+    return health.INFO  # left the known network, a device did not answer, too many hops

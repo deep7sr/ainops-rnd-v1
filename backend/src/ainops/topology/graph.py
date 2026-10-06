@@ -208,29 +208,12 @@ class GraphStore:
 
     def owner_of_ip(self, address: str) -> list[dict[str, Any]]:
         """Interfaces that own this IP, or whose subnet contains it (e.g. a LAN host)."""
-        ip = ipaddress.ip_address(address)
         rows = self._read(
             "MATCH (d:Device)-[:HAS_INTERFACE]->(i:Interface) "
             "RETURN d.name AS device, d.site AS site, i.name AS interface, i.ipv4 AS ipv4, "
             "i.status AS status"
         )
-        exact, containing = [], []
-        for row in rows:
-            for cidr in row["ipv4"] or []:
-                iface = ipaddress.ip_interface(cidr)
-                if iface.ip == ip:
-                    exact.append(
-                        {**row, "match": "owns this address", "subnet": str(iface.network)}
-                    )
-                elif ip in iface.network:
-                    containing.append(
-                        {
-                            **row,
-                            "match": "address is in this interface's subnet",
-                            "subnet": str(iface.network),
-                        }  # fmt: skip
-                    )
-        return exact or containing
+        return owners_of_ip(rows, address)
 
     def links(self, device: str | None = None) -> list[dict[str, Any]]:
         rows = self._read(
@@ -301,3 +284,26 @@ class GraphStore:
             "links": self.links(),
             "discovery": self.last_discovery(),
         }
+
+
+def owners_of_ip(interfaces: list[dict[str, Any]], address: str) -> list[dict[str, Any]]:
+    """The interfaces that own `address`, or else those whose subnet contains it.
+
+    `interfaces` rows have device, site, interface, ipv4 (a list of "a.b.c.d/len") and status.
+    """
+    ip = ipaddress.ip_address(address)
+    exact, containing = [], []
+    for row in interfaces:
+        for cidr in row["ipv4"] or []:
+            iface = ipaddress.ip_interface(cidr)
+            if iface.ip == ip:
+                exact.append({**row, "match": "owns this address", "subnet": str(iface.network)})
+            elif ip in iface.network:
+                containing.append(
+                    {
+                        **row,
+                        "match": "address is in this interface's subnet",
+                        "subnet": str(iface.network),
+                    }
+                )
+    return exact or containing

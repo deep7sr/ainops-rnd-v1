@@ -61,6 +61,8 @@ export const NO_HIGHLIGHT: MapHighlight = {
 export function boxIssue(text: string): string {
   const shut = /^(\S+) is administratively down/.exec(text)
   if (shut) return `${shut[1]} shut (admin down)`
+  const noRoute = /has no route to (\S+)$/.exec(text)
+  if (noRoute) return `no route to ${noRoute[1]}`
   const down = /^(\S+) is down$/.exec(text)
   return down ? `${down[1]} down` : text
 }

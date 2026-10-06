@@ -15,6 +15,7 @@ import type { DeviceState } from '@/features/topology/highlight'
 import { cn } from '@/lib/utils'
 import type { Step } from './derive'
 import { formatMs } from './format'
+import { hopsOf } from './trace'
 
 // Clicking a device on the live map: what it is, what the agent found on it in this run (with the
 // evidence), its interfaces from the knowledge graph, and a live read-only check on demand.
@@ -104,7 +105,9 @@ export function DevicePanel({
   onClose: () => void
   onSelectEvidence: (id: string) => void
 }) {
-  const mine = device ? steps.filter((s) => s.device === device.name) : []
+  const mine = device
+    ? steps.filter((s) => s.device === device.name || hopsOf(s).includes(device.name))
+    : []
 
   return (
     <Sheet open={device !== null} onOpenChange={(open) => !open && onClose()}>

@@ -27,8 +27,9 @@ function Result({ step }: { step: Step }) {
     return (
       <span className="flex items-start gap-1.5 font-medium text-status-warning">
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        Found a problem{step.device ? ` on ${step.device}` : ''}:{' '}
-        {step.health.issues.map((i) => i.text).join('; ')}
+        Found a problem{step.device && step.tool !== 'trace_route'
+          ? ` on ${step.device}`
+          : ''}: {step.health.issues.map((i) => i.text).join('; ')}
       </span>
     )
   }
@@ -115,7 +116,7 @@ export function NowBanner({ now, stepCount }: { now: Now; stepCount: number }) {
           </p>
           <p className="text-sm text-muted-foreground">
             {needsEvidence(now.verdict.report.outcome)
-              ? `${now.verdict.toolCalls} checks in ${formatMs(now.verdict.atMs)} · confidence ${now.verdict.confidence}`
+              ? `${now.verdict.toolCalls} ${now.verdict.toolCalls === 1 ? 'check' : 'checks'} in ${formatMs(now.verdict.atMs)} · confidence ${now.verdict.confidence}`
               : now.verdict.report.outcome === 'refused'
                 ? 'Refused before running any check: AINOPS only reads the network'
                 : `Answered in ${formatMs(now.verdict.atMs)} without checking any device`}

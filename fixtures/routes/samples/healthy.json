@@ -1,0 +1,88 @@
+{
+  "device": "CORE-SW-TRV",
+  "site": "TRV",
+  "summary": "CORE-SW-TRV -> IPLC-RTR-TRV -> IPLC-RTR-MAA -> CORE-SW-MAA: 192.168.200.10 is on CORE-SW-MAA's own network 192.168.200.0/24 (E1/0); the route is complete in this direction",
+  "data": {
+    "source": "192.168.100.10",
+    "destination": "192.168.200.10",
+    "start_note": "192.168.100.10 is on CORE-SW-TRV's network 192.168.100.0/24 (E1/0)",
+    "status": "reached",
+    "stopped_at": "CORE-SW-MAA",
+    "path": [
+      "CORE-SW-TRV",
+      "IPLC-RTR-TRV",
+      "IPLC-RTR-MAA",
+      "CORE-SW-MAA"
+    ],
+    "hops": [
+      {
+        "device": "CORE-SW-TRV",
+        "site": "TRV",
+        "route": {
+          "prefix": "192.168.200.0/24",
+          "protocol": "ospf",
+          "next_hop": "10.10.3.2",
+          "interface": "Fa2/0",
+          "distance_metric": "110/13"
+        },
+        "equal_paths": 1,
+        "next_hop_device": "IPLC-RTR-TRV",
+        "note": null,
+        "command": "show ip route",
+        "source": "replay"
+      },
+      {
+        "device": "IPLC-RTR-TRV",
+        "site": "TRV",
+        "route": {
+          "prefix": "192.168.200.0/24",
+          "protocol": "ospf",
+          "next_hop": "10.10.4.2",
+          "interface": "Fa2/0",
+          "distance_metric": "110/12"
+        },
+        "equal_paths": 1,
+        "next_hop_device": "IPLC-RTR-MAA",
+        "note": null,
+        "command": "show ip route",
+        "source": "replay"
+      },
+      {
+        "device": "IPLC-RTR-MAA",
+        "site": "MAA",
+        "route": {
+          "prefix": "192.168.200.0/24",
+          "protocol": "ospf",
+          "next_hop": "10.10.5.2",
+          "interface": "Fa0/0",
+          "distance_metric": "110/11"
+        },
+        "equal_paths": 1,
+        "next_hop_device": "CORE-SW-MAA",
+        "note": null,
+        "command": "show ip route",
+        "source": "replay"
+      },
+      {
+        "device": "CORE-SW-MAA",
+        "site": "MAA",
+        "route": {
+          "prefix": "192.168.200.0/24",
+          "protocol": "connected",
+          "next_hop": "",
+          "interface": "E1/0",
+          "distance_metric": ""
+        },
+        "equal_paths": 1,
+        "next_hop_device": null,
+        "note": null,
+        "command": "show ip route",
+        "source": "replay"
+      }
+    ]
+  },
+  "health": {
+    "status": "ok",
+    "issues": []
+  }
+}

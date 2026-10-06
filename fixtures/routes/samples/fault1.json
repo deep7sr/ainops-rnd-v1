@@ -1,0 +1,36 @@
+{
+  "device": "CORE-SW-TRV",
+  "site": "TRV",
+  "summary": "CORE-SW-TRV has no route to 192.168.200.10 (no matching route and no default route)",
+  "data": {
+    "source": "192.168.100.0/24",
+    "destination": "192.168.200.10",
+    "start_note": "192.168.100.0 is on CORE-SW-TRV's network 192.168.100.0/24 (E1/0)",
+    "status": "no_route",
+    "stopped_at": "CORE-SW-TRV",
+    "path": [
+      "CORE-SW-TRV"
+    ],
+    "hops": [
+      {
+        "device": "CORE-SW-TRV",
+        "site": "TRV",
+        "route": null,
+        "equal_paths": 0,
+        "next_hop_device": null,
+        "note": null,
+        "command": "show ip route",
+        "source": "replay"
+      }
+    ]
+  },
+  "health": {
+    "status": "problem",
+    "issues": [
+      {
+        "text": "CORE-SW-TRV has no route to 192.168.200.10",
+        "interface": null
+      }
+    ]
+  }
+}

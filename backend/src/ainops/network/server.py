@@ -23,7 +23,14 @@ from ainops.config import get_settings
 from ainops.inventory import load_inventory
 from ainops.network.audit import AuditLog
 from ainops.network.executor import Executor, LiveExecutor, ReplayExecutor
-from ainops.network.service import NetworkService, ToolFailure, ToolResult, load_commands
+from ainops.network.service import (
+    NetworkService,
+    ToolFailure,
+    ToolResult,
+    TraceResult,
+    load_commands,
+)
+from ainops.topology.graph import GraphStore
 
 INSTRUCTIONS = """\
 Read-only troubleshooting tools for the network devices of the TRV/MAA lab (Cisco IOS routers and
@@ -73,6 +80,10 @@ def build_service() -> NetworkService:
         executor=executor,
         audit=AuditLog(settings.logs_dir / "network-audit.jsonl"),
         commands=load_commands(),
+        # trace_route asks the knowledge graph which device owns a next-hop address (read only).
+        locate=GraphStore(
+            settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
+        ).owner_of_ip,
     )
 
 
@@ -83,7 +94,7 @@ def service() -> NetworkService:
     return _service
 
 
-async def _call(method: Callable[..., ToolResult], *args: Any) -> ToolResult:
+async def _call[R: (ToolResult, TraceResult)](method: Callable[..., R], *args: Any) -> R:
     """Run a (blocking) tool in a worker thread so one slow console never blocks the server."""
     try:
         return await anyio.to_thread.run_sync(partial(method, *args))
@@ -143,6 +154,27 @@ async def get_routes(
     """The routing table of a device. With `destination`, answers "does this device know how to
     reach this IP, and via which next hop?". A missing route explains why traffic cannot leave."""
     return await _call(service().get_routes, device, destination)
+
+
+@tool("Trace the route")
+async def trace_route(
+    source: Annotated[
+        str,
+        Field(
+            description="Device name/alias to start from, or the IPv4 address of a host or LAN "
+            "where traffic starts (the walk starts at that LAN's gateway)"
+        ),
+    ],
+    destination: Annotated[str, Field(description="IPv4 address the traffic should reach")],
+) -> TraceResult:
+    """Follow the routing tables hop by hop from the source towards the destination: the way
+    traffic REALLY goes (each device's own choice of route), not just how devices are cabled.
+    Each hop shows the route used (prefix, learned from connected/static/OSPF/BGP, next hop,
+    distance/metric). Use it FIRST for "cannot reach" questions: where it stops is where to look.
+    "no_route" = that device has no route (check its OSPF neighbours and interfaces towards the
+    destination); "reached" = routing is fine in this direction (trace back from the destination
+    side too, replies need a way back; then test with ping)."""
+    return await _call(service().trace_route, source, destination)
 
 
 @tool("OSPF neighbours")

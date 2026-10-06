@@ -1,6 +1,7 @@
 import type { Evidence, Report, RunEvent, ToolHealth } from '@/api'
 import type { DeviceState, MapHighlight, MapPing } from '@/features/topology/highlight'
 import { describeCall, shortCall } from './describe'
+import { readTrace } from './trace'
 
 // Turns the raw event stream of an investigation into what the page shows: the steps of the
 // timeline, the final report, and what to highlight on the map.
@@ -113,6 +114,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
   let error: string | null = null
   let path: string[] = []
   let pathEnds: [string, string] = ['', '']
+  let traced = false // a traced route (the way traffic really goes) beats the cabled path
   const canonical = new Map(deviceNames.map((name) => [name.toUpperCase(), name]))
   // Events come from the server and from old recordings: anything but a device name is ignored.
   const resolve = (name: unknown) =>
@@ -141,7 +143,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           data: null,
           evidence: null,
           health: null,
-          device: resolve(deviceOf(event.args)),
+          device: resolve(deviceOf(event.args)) ?? traceStart(event.tool, event.args, canonical),
           durationMs: null,
           atMs: event.at_ms,
         }
@@ -159,7 +161,13 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         step.health = event.health ?? null
         step.durationMs = event.duration_ms
         step.device = resolve(event.device) ?? step.device
-        if (event.ok && event.tool === 'get_path') {
+        const trace = event.ok && event.tool === 'trace_route' ? readTrace(event.data) : null
+        if (trace && trace.hops.length >= 2) {
+          path = trace.hops.map((hop) => resolve(hop.device) ?? hop.device)
+          pathEnds = [String(step.args.source ?? ''), trace.destination]
+          traced = true
+        }
+        if (event.ok && event.tool === 'get_path' && !traced) {
           const devices = (event.data as { devices?: unknown } | null)?.devices
           if (Array.isArray(devices)) {
             path = devices.map((d) => resolve(String(d)) ?? String(d))
@@ -231,12 +239,53 @@ function deviceSteps(steps: Step[]): Step[] {
   return steps.filter((s) => s.kind === 'tool' && s.server === 'network' && s.device)
 }
 
+/** A running trace shows on its start device when the source is a device name (not an IP). */
+function traceStart(tool: string, args: Record<string, unknown>, canonical: Map<string, string>) {
+  if (tool !== 'trace_route' || typeof args.source !== 'string') return null
+  return canonical.get(args.source.toUpperCase()) ?? null
+}
+
+/** What one step tells about one device. A trace tells something about every hop it read. */
+interface Mark {
+  device: string
+  state: Step['state']
+  health: ToolHealth | null
+}
+
+const OK: ToolHealth = { status: 'ok', issues: [] }
+
+function marks(steps: Step[]): Mark[] {
+  const out: Mark[] = []
+  for (const step of deviceSteps(steps)) {
+    const trace = step.tool === 'trace_route' && step.state === 'ok' ? readTrace(step.data) : null
+    if (!trace) {
+      out.push({ device: step.device as string, state: step.state, health: step.health })
+      continue
+    }
+    trace.hops.forEach((hop, index) => {
+      if (index < trace.hops.length - 1) {
+        out.push({ device: hop.device, state: 'ok', health: OK }) // it routed the traffic on
+      } else if (trace.status === 'device_failed') {
+        out.push({ device: hop.device, state: 'error', health: null })
+      } else {
+        out.push({ device: hop.device, state: 'ok', health: step.health }) // where the walk ended
+      }
+    })
+  }
+  return out
+}
+
+/** The device a step's problem is about: for a trace, where the route stops. */
+function problemDevice(step: Step): string | null {
+  if (step.tool === 'trace_route') return readTrace(step.data)?.stoppedAt ?? step.device
+  return step.device
+}
+
 /** One state per device the agent touched; a problem found on it outweighs everything else. */
 export function deviceStates(steps: Step[]): Map<string, DeviceState> {
-  const byDevice = new Map<string, Step[]>()
-  for (const step of deviceSteps(steps)) {
-    const device = step.device as string
-    byDevice.set(device, [...(byDevice.get(device) ?? []), step])
+  const byDevice = new Map<string, Mark[]>()
+  for (const mark of marks(steps)) {
+    byDevice.set(mark.device, [...(byDevice.get(mark.device) ?? []), mark])
   }
   const states = new Map<string, DeviceState>()
   for (const [device, list] of byDevice) {
@@ -251,10 +300,9 @@ export function deviceStates(steps: Step[]): Map<string, DeviceState> {
 
 function deviceIssues(steps: Step[]): Map<string, string[]> {
   const issues = new Map<string, string[]>()
-  for (const step of deviceSteps(steps)) {
-    if (step.health?.status !== 'problem') continue
-    const device = step.device as string
-    for (const issue of step.health.issues) {
+  for (const { device, health } of marks(steps)) {
+    if (health?.status !== 'problem') continue
+    for (const issue of health.issues) {
       const list = issues.get(device) ?? []
       if (!list.includes(issue.text)) issues.set(device, [...list, issue.text])
     }
@@ -273,10 +321,11 @@ function blamed(verdict: Verdict | null, steps: Step[], deviceNames: string[]) {
   const { devices, interfaces } = parseAffected(verdict.report.affected, deviceNames)
   for (const id of verdict.report.root_cause_evidence) {
     const step = steps.find((s) => s.evidenceId === id)
-    if (!step?.device || step.health?.status !== 'problem') continue
-    devices.add(step.device)
+    const device = step ? problemDevice(step) : null
+    if (!step || !device || step.health?.status !== 'problem') continue
+    devices.add(device)
     for (const issue of step.health.issues) {
-      if (issue.interface) interfaces.add(`${step.device}:${shortInterface(issue.interface)}`)
+      if (issue.interface) interfaces.add(`${device}:${shortInterface(issue.interface)}`)
     }
   }
   return { devices, interfaces }

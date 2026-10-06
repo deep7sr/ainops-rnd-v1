@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { Step } from './derive'
 import { formatMs } from './format'
+import { readTrace } from './trace'
+import { TraceHops } from './trace-hops'
 
 const SERVER_ICON: Record<string, LucideIcon> = { topology: Network, network: Router }
 
@@ -40,6 +42,7 @@ function StepItem({
   const [open, setOpen] = useState(false)
   const Icon = step.kind === 'refused' ? ShieldX : (SERVER_ICON[step.server] ?? Router)
   const details = argText(step.args)
+  const trace = step.tool === 'trace_route' && step.state === 'ok' ? readTrace(step.data) : null
 
   return (
     <li id={step.evidenceId ? `step-${step.evidenceId}` : undefined} className="flex gap-3">
@@ -150,6 +153,8 @@ function StepItem({
             {formatMs(step.durationMs)}
           </span>
         </div>
+
+        {trace && <TraceHops trace={trace} />}
 
         {step.state !== 'running' &&
           step.kind === 'tool' &&
