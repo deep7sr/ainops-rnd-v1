@@ -34,10 +34,13 @@ def _discover() -> None:
         result = asyncio.run(discover(url, inventory, store, show))
     finally:
         store.close()
+    if not result.graph_updated:
+        print("\nNo device answered: the knowledge graph was NOT changed.")
     print(f"\n{len(result.links)} links ({result.source} data):")
     for link in result.links:
         sources = "+".join(link.sources)
-        print(f"  {link.a} {link.a_interface} <-> {link.b} {link.b_interface}  [{sources}]")
+        stale = f"  (not refreshed since {link.stale_since})" if link.stale_since else ""
+        print(f"  {link.a} {link.a_interface} <-> {link.b} {link.b_interface}  [{sources}]{stale}")
     print("\nFindings:" if result.findings else "\nNo findings.")
     for finding in result.findings:
         print(f"  - {finding}")

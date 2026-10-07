@@ -13,6 +13,23 @@ function when(iso: string | undefined | null): string {
   return iso ? new Date(iso).toLocaleString() : 'never'
 }
 
+/** After a run that reached no device: say that the graph was kept, not emptied. */
+export function NotUpdated({ events }: { events: RunEvent[] }) {
+  const done = events.find(
+    (e): e is Extract<RunEvent, { type: 'discovery_done' }> => e.type === 'discovery_done',
+  )
+  if (done?.graph_updated !== false) return null
+  return (
+    <p
+      role="alert"
+      className="flex items-start gap-2 rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-2 text-sm"
+    >
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-warning" />
+      {done.findings[0] ?? 'No device answered: the knowledge graph was not changed.'}
+    </p>
+  )
+}
+
 function DiscoveryProgress({ events }: { events: RunEvent[] }) {
   const devices = events.find((e) => e.type === 'started' && 'devices' in e) as
     { devices: string[] } | undefined
@@ -211,6 +228,7 @@ export function TopologyPage() {
         </p>
       )}
       {runId && <DiscoveryProgress events={run.events} />}
+      {runId && <NotUpdated events={run.events} />}
 
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[

@@ -10,12 +10,12 @@ Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
 Gateway of last resort is not set
 
       10.0.0.0/8 is variably subnetted, 7 subnets, 2 masks
-O        10.10.2.0/24 [110/3] via 10.10.4.1, 00:41:10, FastEthernet2/0
-O        10.10.3.0/24 [110/2] via 10.10.4.1, 00:41:10, FastEthernet2/0
+O        10.10.2.0/24 [110/3] via 10.10.4.1, 00:03:24, FastEthernet2/0
+O        10.10.3.0/24 [110/2] via 10.10.4.1, 01:14:16, FastEthernet2/0
 C        10.10.4.0/24 is directly connected, FastEthernet2/0
 L        10.10.4.2/32 is directly connected, FastEthernet2/0
 C        10.10.5.0/24 is directly connected, FastEthernet0/0
 L        10.10.5.1/32 is directly connected, FastEthernet0/0
-O        10.10.6.0/24 [110/2] via 10.10.5.2, 00:41:10, FastEthernet0/0
-O     192.168.100.0/24 [110/12] via 10.10.4.1, 00:41:10, FastEthernet2/0
-O     192.168.200.0/24 [110/11] via 10.10.5.2, 00:41:10, FastEthernet0/0
+O        10.10.6.0/24 [110/2] via 10.10.5.2, 00:03:24, FastEthernet0/0
+O     192.168.100.0/24 [110/12] via 10.10.4.1, 00:03:24, FastEthernet2/0
+O     192.168.200.0/24 [110/11] via 10.10.5.2, 00:03:24, FastEthernet0/0

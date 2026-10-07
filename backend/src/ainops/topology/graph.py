@@ -33,6 +33,8 @@ class InterfaceFact:
     name: str
     status: str
     ipv4: list[str] = field(default_factory=list)
+    # When the device last answered, if it did not answer this time (its last known state is kept).
+    stale_since: str | None = None
 
     @property
     def key(self) -> str:
@@ -50,6 +52,7 @@ class LinkFact:
     b_interface: str
     subnet: str | None
     sources: list[str]  # how it was found: "cdp", "lldp", "subnet"
+    stale_since: str | None = None  # an end did not answer: last known link, kept
 
     @property
     def key(self) -> str:
@@ -125,7 +128,7 @@ class GraphStore:
             UNWIND $interfaces AS x
             MATCH (d:Device {name: x.device})
             CREATE (i:Interface {key: x.key, device: x.device, name: x.name, status: x.status,
-                                 ipv4: x.ipv4})
+                                 ipv4: x.ipv4, stale_since: x.stale_since})
             CREATE (d)-[:HAS_INTERFACE]->(i)
             WITH i, x
             UNWIND x.subnets AS cidr
@@ -140,6 +143,7 @@ class GraphStore:
                     "status": i.status,
                     "ipv4": i.ipv4,
                     "subnets": i.subnets(),
+                    "stale_since": i.stale_since,
                 }
                 for i in interfaces
             ],
@@ -149,7 +153,8 @@ class GraphStore:
             UNWIND $links AS x
             MATCH (a:Device {name: x.a}), (b:Device {name: x.b})
             CREATE (a)-[:LINK {key: x.key, a_interface: x.a_interface, b_interface: x.b_interface,
-                               subnet: x.subnet, sources: x.sources}]->(b)
+                               subnet: x.subnet, sources: x.sources,
+                               stale_since: x.stale_since}]->(b)
             """,
             links=[
                 {
@@ -160,6 +165,7 @@ class GraphStore:
                     "b_interface": link.b_interface,
                     "subnet": link.subnet,
                     "sources": link.sources,
+                    "stale_since": link.stale_since,
                 }
                 for link in links
             ],
@@ -200,7 +206,8 @@ class GraphStore:
             RETURN d.name AS name, d.site AS site, d.role AS role, d.platform AS platform,
                    d.description AS description, d.aliases AS aliases,
                    [x IN collect(i) WHERE x IS NOT NULL |
-                    {name: x.name, status: x.status, ipv4: x.ipv4}] AS interfaces
+                    {name: x.name, status: x.status, ipv4: x.ipv4,
+                     stale_since: x.stale_since}] AS interfaces
             """,
             name=name.strip(),
         )
@@ -225,7 +232,8 @@ class GraphStore:
             OPTIONAL MATCH (b)-[:HAS_INTERFACE]->(bi:Interface {name: l.b_interface})
             RETURN l.key AS key, a.name AS a, l.a_interface AS a_interface, ai.status AS a_status,
                    b.name AS b, l.b_interface AS b_interface, bi.status AS b_status,
-                   l.subnet AS subnet, l.sources AS sources, a.site AS a_site, b.site AS b_site
+                   l.subnet AS subnet, l.sources AS sources, a.site AS a_site, b.site AS b_site,
+                   l.stale_since AS stale_since
             ORDER BY a, b
             """,
             device=device,
@@ -275,7 +283,8 @@ class GraphStore:
             RETURN d.name AS name, d.site AS site, d.role AS role, d.platform AS platform,
                    d.description AS description,
                    [x IN collect(i) WHERE x IS NOT NULL |
-                    {name: x.name, status: x.status, ipv4: x.ipv4}] AS interfaces
+                    {name: x.name, status: x.status, ipv4: x.ipv4,
+                     stale_since: x.stale_since}] AS interfaces
             ORDER BY d.site, d.name
             """
         )

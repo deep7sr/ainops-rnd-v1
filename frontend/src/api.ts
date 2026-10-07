@@ -69,6 +69,8 @@ export interface GraphInterface {
   name: string
   status: string
   ipv4: string[]
+  /** Set when the device did not answer the last discovery: when this was last seen. */
+  stale_since?: string | null
 }
 
 export interface GraphDevice {
@@ -90,6 +92,8 @@ export interface GraphLink {
   b_status: string | null
   subnet: string | null
   sources: string[]
+  /** Set when an end did not answer the last discovery: the link as last seen. */
+  stale_since?: string | null
 }
 
 export interface Discovery {
@@ -102,6 +106,10 @@ export interface Discovery {
   findings: string[]
   added_links: string[]
   removed_links: string[]
+  /** Devices that did not answer: their last known interfaces and links were kept. */
+  devices_kept?: string[]
+  /** False when no device answered and the graph was left as it was. */
+  graph_updated?: boolean
 }
 
 export interface Topology {

@@ -8,6 +8,10 @@ for the interfaces and the CDP/LLDP neighbours, then works out the links:
 It also reports what looks wrong: links that are down, neighbours not in the inventory, both ends
 of a CDP link in different subnets, addressed interfaces with no known peer.
 Then it compares with the previous graph (links added/removed, interfaces changed) and replaces it.
+
+A device that does not answer never erases what the graph knew about it: its last known interfaces
+and links are kept, marked `stale_since` (when it last answered). If no device answers at all (the
+lab is off, the network MCP server cannot reach anything), the graph is not changed.
 """
 
 import asyncio
@@ -45,6 +49,8 @@ class DiscoveryResult:
     findings: list[str]
     added_links: list[str]
     removed_links: list[str]
+    devices_kept: list[str] = field(default_factory=list)  # did not answer: last known state kept
+    graph_updated: bool = True  # False when no device answered and the graph was left as it was
 
     def summary(self) -> dict[str, Any]:
         """Flat values only: stored as the (:Discovery) node and shown in the UI."""
@@ -58,6 +64,8 @@ class DiscoveryResult:
             "findings": self.findings,
             "added_links": self.added_links,
             "removed_links": self.removed_links,
+            "devices_kept": self.devices_kept,
+            "graph_updated": self.graph_updated,
         }
 
 
@@ -210,31 +218,110 @@ def _error_text(result: Any) -> str:
         return "no answer"
 
 
+def plan_update(
+    inventory: Inventory,
+    reports: dict[str, DeviceReport],
+    previous: dict[str, Any],
+    source: str,
+    at: str,
+) -> DiscoveryResult:
+    """What the graph should hold after this run (pure: unit-tested).
+
+    `previous` is GraphStore.snapshot(): the graph before the run.
+    """
+    usable = {name: r for name, r in reports.items() if r.error is None}
+    failed = sorted(f"{n}: {r.error}" for n, r in reports.items() if r.error)
+    last_at = (previous.get("discovery") or {}).get("at")
+    previous_keys = {row["key"] for row in previous.get("links", [])}
+    if not usable:
+        return DiscoveryResult(
+            at=at,
+            source=source,
+            devices_ok=[],
+            devices_failed=failed,
+            interfaces=[],
+            links=[],
+            findings=[
+                "No device answered: the knowledge graph was not changed (it still shows the "
+                f"discovery of {last_at or 'never: it is empty'})"
+            ],
+            added_links=[],
+            removed_links=[],
+            graph_updated=False,
+        )
+
+    # Devices that did not answer: link them with what the graph knew about them.
+    unanswered = {name for name, r in reports.items() if r.error}
+    kept: dict[str, str] = {}  # device -> since when its data is not refreshed
+    combined = dict(usable)
+    for device in previous.get("devices", []):
+        name, known = device["name"], device.get("interfaces") or []
+        if name not in unanswered or not known:
+            continue
+        since = next((i["stale_since"] for i in known if i.get("stale_since")), None)
+        kept[name] = since or last_at or at
+        combined[name] = DeviceReport(
+            interfaces=[
+                {"name": i["name"], "status": i["status"], "ipv4": list(i.get("ipv4") or [])}
+                for i in known
+            ]
+        )
+
+    interfaces, links, findings = build_links(inventory, combined)
+    for interface in interfaces:
+        interface.stale_since = kept.get(interface.device)
+    found = {link.key for link in links}
+    for row in previous.get("links", []):  # e.g. a CDP link only the silent device reported
+        if row["key"] not in found and (row["a"] in kept or row["b"] in kept):
+            links.append(
+                LinkFact(
+                    a=row["a"],
+                    a_interface=row["a_interface"],
+                    b=row["b"],
+                    b_interface=row["b_interface"],
+                    subnet=row.get("subnet"),
+                    sources=list(row.get("sources") or []),
+                )
+            )
+    for link in links:
+        since = [kept[end] for end in (link.a, link.b) if end in kept]
+        link.stale_since = min(since) if since else None
+    links.sort(key=lambda x: x.key)
+    findings += [
+        f"{name} did not answer: its interfaces and links as of {since} are kept, marked not "
+        "refreshed"
+        for name, since in sorted(kept.items())
+    ]
+
+    current = {link.key for link in links}
+
+    def answered(key: str) -> bool:  # a link can only be "removed" if both ends answered
+        return all(end.split(":", 1)[0] in usable for end in key.split("|"))
+
+    return DiscoveryResult(
+        at=at,
+        source=source,
+        devices_ok=sorted(usable),
+        devices_failed=failed,
+        interfaces=interfaces,
+        links=links,
+        findings=findings,
+        added_links=sorted(current - previous_keys) if previous_keys else [],
+        removed_links=sorted(k for k in previous_keys - current if answered(k)),
+        devices_kept=sorted(kept),
+    )
+
+
 async def discover(
     network_url: str,
     inventory: Inventory,
     store: GraphStore,
     progress: ProgressCallback | None = None,
 ) -> DiscoveryResult:
-    previous = {row["key"] for row in store.links()}
+    previous = store.snapshot()
     reports, source = await collect(network_url, inventory, progress)
-    usable = {name: r for name, r in reports.items() if r.error is None}
-    interfaces, links, findings = build_links(inventory, usable)
-    current = {link.key for link in links}
-
-    def answered(key: str) -> bool:  # a link can only be "removed" if both ends answered
-        return all(end.split(":", 1)[0] in usable for end in key.split("|"))
-
-    result = DiscoveryResult(
-        at=datetime.now(UTC).isoformat(timespec="seconds"),
-        source=source,
-        devices_ok=sorted(usable),
-        devices_failed=sorted(f"{n}: {r.error}" for n, r in reports.items() if r.error),
-        interfaces=interfaces,
-        links=links,
-        findings=findings,
-        added_links=sorted(current - previous) if previous else [],
-        removed_links=sorted(k for k in previous - current if answered(k)),
-    )
-    store.replace_topology(inventory, interfaces, links, result.summary())
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    result = plan_update(inventory, reports, previous, source, at)
+    if result.graph_updated:
+        store.replace_topology(inventory, result.interfaces, result.links, result.summary())
     return result
