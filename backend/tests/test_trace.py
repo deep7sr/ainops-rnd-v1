@@ -14,13 +14,13 @@ from typing import Any
 import pytest
 from langchain.agents.middleware import ToolCallRequest
 from langchain_core.messages import ToolCall, ToolMessage
+from replay import ReplayExecutor
 
 from ainops.agent.runner import AinopsMiddleware, Investigation
 from ainops.config import REPO_ROOT
 from ainops.inventory import load_inventory
 from ainops.network import trace
 from ainops.network.audit import AuditLog
-from ainops.network.executor import ReplayExecutor
 from ainops.network.service import NetworkService, ToolFailure, load_commands
 from ainops.topology.graph import owners_of_ip
 

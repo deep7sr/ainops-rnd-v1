@@ -18,12 +18,9 @@ load_dotenv(REPO_ROOT / ".env")
 
 
 class Settings(BaseSettings):
-    # "live": log into the EVE-NG lab with Netmiko (and record every output for replay).
-    # "replay": answer from the recorded outputs in fixtures/lab; no device is contacted.
-    lab_executor: Literal["live", "replay"] = "replay"
+    # AINOPS always works on the live lab: the EVE-NG host whose consoles it logs into.
     lab_eve_host: str = ""
     lab_inventory: Path = REPO_ROOT / "lab" / "inventory.yaml"
-    fixtures_dir: Path = REPO_ROOT / "fixtures" / "lab"
     logs_dir: Path = REPO_ROOT / "logs"
     # Expert skills for frequent questions (skills/<name>/SKILL.md, see agent/skills.py).
     skills_dir: Path = REPO_ROOT / "skills"

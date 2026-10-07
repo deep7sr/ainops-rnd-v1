@@ -15,10 +15,14 @@ Read-only, vendor-neutral tools for the lab routers (Cisco IOS) and firewalls (J
 uv run python -m ainops mcp-network        # http://127.0.0.1:8101/mcp
 ```
 
-- `LAB_EXECUTOR=replay` (default): answers from the recorded outputs in `fixtures/lab/`, no device
-  is contacted.
-- `LAB_EXECUTOR=live` and `LAB_EVE_HOST=<EVE-NG address>` in the repo-root `.env`: logs into the
-  lab over the EVE-NG consoles and records every (redacted) output for replay.
+It always works on the live lab: `LAB_EVE_HOST=<EVE-NG address>` in the repo-root `.env`. There is
+no mode that answers from saved outputs, and nothing is recorded while it works.
+
+Test data (real device outputs the tests replay) is captured on purpose, never by normal use:
+
+```
+uv run python -m ainops capture healthy-2026-10-08   # -> fixtures/captures/healthy-2026-10-08/
+```
 
 Try the tools by hand, without any LLM, in the official MCP Inspector:
 

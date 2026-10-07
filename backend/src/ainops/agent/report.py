@@ -54,7 +54,7 @@ class EvidenceRecord:
     tool: str
     device: str | None
     summary: str
-    source: str  # live / replay
+    source: str  # live (graph for topology answers)
     ok: bool
 
 
@@ -98,6 +98,4 @@ def verify(report: Report, evidence: dict[str, EvidenceRecord]) -> Verdict:
     else:
         confidence = "low"
         reasons.append("the investigation could not reach a conclusion")
-    if any(r.source == "replay" for r in evidence.values()):
-        reasons.append("some evidence came from recorded outputs (replay), not the live lab")
     return Verdict(confidence, reasons, invalid)

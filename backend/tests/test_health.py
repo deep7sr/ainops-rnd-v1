@@ -72,7 +72,9 @@ def test_service_attaches_the_verdict(service: NetworkService) -> None:
 
 def test_fault_recording_gives_a_problem(service: NetworkService, tmp_path: Path) -> None:
     """The real fault-1 output (Fa2/0 shut on IPLC-RTR-MAA) must come out as a problem."""
-    from ainops.network.executor import ReplayExecutor, fixture_path
+    from replay import ReplayExecutor
+
+    from ainops.network.capture import fixture_path
 
     path = fixture_path(tmp_path, "IPLC-RTR-MAA", "show ip interface")
     path.parent.mkdir(parents=True)

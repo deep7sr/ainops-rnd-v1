@@ -82,7 +82,7 @@ def make_executor(
     tmp_path: Path, clock: Clock, sessions: list[FakeSession]
 ) -> tuple[LiveExecutor, list[FakeSession]]:
     """A LiveExecutor that connects to `sessions` in order; returns the ones handed out."""
-    executor = LiveExecutor("eve.test", tmp_path)
+    executor = LiveExecutor("eve.test")
     executor._clock = clock
     handed_out: list[FakeSession] = []
 

@@ -57,7 +57,8 @@ export interface ServiceStatus {
 }
 
 export interface Health {
-  executor: 'live' | 'replay'
+  /** AINOPS only works on the live devices. */
+  executor: 'live'
   llm_model: string
   llm_configured: boolean
   mcp_network: ServiceStatus
@@ -189,6 +190,7 @@ export interface AuditEntry {
 
 export interface Evidence {
   command: string
+  /** 'replay' only in investigations saved before AINOPS became live-only. */
   source: 'live' | 'replay'
   collected_at: string
   duration_ms: number

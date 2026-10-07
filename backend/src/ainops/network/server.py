@@ -22,7 +22,7 @@ from pydantic import Field
 from ainops.config import get_settings
 from ainops.inventory import load_inventory
 from ainops.network.audit import AuditLog
-from ainops.network.executor import Executor, LiveExecutor, ReplayExecutor
+from ainops.network.executor import LiveExecutor
 from ainops.network.service import (
     NetworkService,
     ToolFailure,
@@ -70,11 +70,9 @@ _service: NetworkService | None = None
 
 
 def build_service() -> NetworkService:
-    executor: Executor
-    if settings.lab_executor == "live":
-        executor = LiveExecutor(settings.lab_eve_host, settings.fixtures_dir)
-    else:
-        executor = ReplayExecutor(settings.fixtures_dir)
+    if not settings.lab_eve_host:
+        raise SystemExit("LAB_EVE_HOST is not set in the repo-root .env: AINOPS only works live")
+    executor = LiveExecutor(settings.lab_eve_host)
     graph = GraphStore(
         settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
     )

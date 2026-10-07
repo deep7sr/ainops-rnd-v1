@@ -3,11 +3,11 @@
 from pathlib import Path
 
 import pytest
+from replay import ReplayExecutor
 
 from ainops.config import REPO_ROOT
 from ainops.inventory import load_inventory
 from ainops.network.audit import AuditLog
-from ainops.network.executor import ReplayExecutor
 from ainops.network.service import NetworkService, load_commands
 
 

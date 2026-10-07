@@ -46,6 +46,38 @@ def _discover() -> None:
         print(f"  - {finding}")
 
 
+def _capture(name: str) -> None:
+    from ainops.config import get_settings
+    from ainops.inventory import load_inventory
+    from ainops.network.audit import AuditLog
+    from ainops.network.capture import CAPTURES, CapturingExecutor, tools_for
+    from ainops.network.executor import LiveExecutor
+    from ainops.network.service import NetworkService, ToolFailure, load_commands
+
+    settings = get_settings()
+    if not settings.lab_eve_host:
+        raise SystemExit("LAB_EVE_HOST is not set in the repo-root .env")
+    folder = CAPTURES / name
+    executor = CapturingExecutor(LiveExecutor(settings.lab_eve_host), folder)
+    service = NetworkService(
+        inventory=load_inventory(settings.lab_inventory),
+        executor=executor,
+        audit=AuditLog(settings.logs_dir / "network-audit.jsonl"),
+        commands=load_commands(),
+    )
+    print(f"Capturing the live lab into {folder} ...")
+    try:
+        for device in service.inventory.devices:
+            for tool in tools_for(device.platform):
+                try:
+                    result = getattr(service, tool)(device.name)
+                    print(f"  {device.name:<14} {tool:<24} {result.summary[:60]}")
+                except ToolFailure as error:
+                    print(f"  {device.name:<14} {tool:<24} FAILED: {str(error)[:60]}")
+    finally:
+        executor.close()
+
+
 def _ask(question: str) -> None:
     from ainops.agent.runner import investigate
     from ainops.config import get_settings
@@ -90,6 +122,10 @@ def main() -> None:
     commands.add_parser("discover", help="rebuild the knowledge graph (needs mcp-network + Neo4j)")
     api = commands.add_parser("api", help="start the API for the web UI (port 8000)")
     api.add_argument("--reload", action="store_true", help="restart when code changes")
+    capture = commands.add_parser(
+        "capture", help="save the live lab's outputs as test data (fixtures/captures/<name>)"
+    )
+    capture.add_argument("name", help="e.g. healthy-2026-10-08 or fault1")
     ask = commands.add_parser("ask", help="investigate a question (needs both MCP servers)")
     ask.add_argument("question")
     args = parser.parse_args()
@@ -108,5 +144,7 @@ def main() -> None:
         import uvicorn
 
         uvicorn.run("ainops.api.app:app", host="127.0.0.1", port=8000, reload=args.reload)
+    elif args.command == "capture":
+        _capture(args.name)
     elif args.command == "ask":
         _ask(args.question)

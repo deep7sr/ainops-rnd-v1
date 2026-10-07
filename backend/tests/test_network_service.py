@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
+from replay import ReplayExecutor
 
 from ainops.network.audit import AuditLog
-from ainops.network.executor import ReplayExecutor, fixture_path
+from ainops.network.capture import fixture_path
 from ainops.network.redact import redact
 from ainops.network.service import NetworkService, ToolFailure
 

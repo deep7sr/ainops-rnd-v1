@@ -2,7 +2,7 @@
 
 The knowledge graph knows how devices are cabled; only the routing tables say which way a packet is
 sent. Code, not the LLM, walks them:
-1. read the routing table of the current device (the normal read-only command, live or replay);
+1. read the routing table of the current device (the normal read-only command, on the device);
 2. take the route the device itself uses: the most specific prefix that covers the destination.
    The table already holds only the winners: the device chose between static, OSPF, BGP... by
    administrative distance and then metric. We show that choice; we do not redo it;
@@ -32,7 +32,7 @@ class TableRead:
     site: str
     rows: list[dict[str, Any]] | None  # None: the table could not be read or parsed
     command: str
-    source: str  # "live" or "replay"
+    source: str  # "live" (tests replay recorded outputs)
     duration_ms: int
     error: str | None = None
 

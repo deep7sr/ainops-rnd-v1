@@ -76,7 +76,7 @@ async def _list_tools(url: str) -> list[dict[str, Any]]:
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
     status: dict[str, Any] = {
-        "executor": settings.lab_executor,
+        "executor": "live",
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
         "llm_configured": settings.llm_configured,

@@ -27,7 +27,6 @@ from ainops.network.audit import AuditLog
 from ainops.network.executor import (
     DeviceUnreachableError,
     Executor,
-    NoRecordingError,
     RawOutput,
 )
 from ainops.network.guard import CommandRefusedError
@@ -47,7 +46,7 @@ class Evidence(BaseModel):
     """Where a result came from: shown in the UI and cited in the diagnosis."""
 
     command: str
-    source: str  # "live" (from the device now) or "replay" (a recorded output)
+    source: str  # "live": from the device now (only tests replay recorded outputs)
     collected_at: str
     duration_ms: int
 
@@ -176,7 +175,6 @@ class NetworkService:
         except (
             ToolFailure,
             CommandRefusedError,
-            NoRecordingError,
             DeviceUnreachableError,
         ) as error:
             self.audit.write(
@@ -472,7 +470,7 @@ class NetworkService:
             health=_trace_health(walked, target),
             evidence=Evidence(
                 command="; ".join(dict.fromkeys(h["command"] for h in walked.hops if h["command"])),
-                source="live" if "live" in sources else "replay",
+                source=sources.pop() if len(sources) == 1 else "live",
                 collected_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 duration_ms=int((time.monotonic() - started) * 1000),
             ),

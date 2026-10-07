@@ -4,11 +4,12 @@ live lab outputs of 2026-10-07)."""
 from pathlib import Path
 from typing import Any
 
+from replay import ReplayExecutor
+
 from ainops.config import REPO_ROOT
 from ainops.inventory import load_inventory
 from ainops.network import health, parsers
 from ainops.network.audit import AuditLog
-from ainops.network.executor import ReplayExecutor
 from ainops.network.service import NetworkService, load_commands
 from ainops.topology.discovery import DeviceReport, ospf_peers
 from ainops.topology.graph import InterfaceFact, LinkFact

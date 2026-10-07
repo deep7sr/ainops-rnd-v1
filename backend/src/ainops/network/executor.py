@@ -1,26 +1,24 @@
-"""Running a guarded command on a device: live (Netmiko over the EVE-NG console) or replay.
+"""Running a guarded command on a device, live (Netmiko over the EVE-NG console).
 
-Live mode keeps one open session per device and reuses it: logging in to a lab console takes 3-10 s,
-so reusing the session makes the agent's many small checks fast. A lock per device makes sure only
-one command runs on a console at a time (a console cannot be shared). Every redacted output is also
-recorded to fixtures/lab/<device>/<command>.txt, so a rehearsal becomes the replay set.
+AINOPS only ever answers from the real devices: there is no mode that answers from saved outputs,
+and nothing is written to disk while it works. (Recorded outputs exist only as test data under
+fixtures/, captured on purpose with `ainops capture`, see network/capture.py.)
+
+One open session per device is kept and reused: logging in to a lab console takes 3-10 s, so
+reusing the session makes the agent's many small checks fast. A lock per device makes sure only
+one command runs on a console at a time (a console cannot be shared).
 
 An idle console logs out (Cisco: exec-timeout, 10 min in the lab). The next command wakes it in a
 new EXEC session that has lost our settings, so long output stops at "--More--" and the command
 times out. A session idle for longer than IDLE_REFRESH_S is therefore prepared again (prompt, no
 paging) before it is used. A broken session is closed without typing anything: "exit" sent into a
 "--More--" pager arrives as "xit", which the router tries to resolve as a host name for ~20 s.
-
-Replay mode answers from those recordings and contacts no device: the fallback if the lab fails,
-and what the tests use.
 """
 
 import contextlib
-import re
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Protocol
 
 from ainops.config import device_credentials
@@ -43,15 +41,11 @@ class DeviceUnreachableError(Exception):
     """The device could not be reached or the session broke."""
 
 
-class NoRecordingError(Exception):
-    """Replay mode has no recorded output for this command."""
-
-
 @dataclass(frozen=True)
 class RawOutput:
     command: str
     text: str  # redacted
-    source: str  # "live" or "replay"
+    source: str  # "live" (only tests replay recorded outputs)
     duration_ms: int
     device_error: str | None  # the device's error line, if it rejected the command
 
@@ -62,11 +56,6 @@ class Executor(Protocol):
     def run(self, device: Device, command: str) -> RawOutput: ...
 
 
-def fixture_path(root: Path, device: str, command: str) -> Path:
-    slug = re.sub(r"[^a-z0-9]+", "-", command.lower()).strip("-")
-    return root / device / f"{slug}.txt"
-
-
 def _device_error(device: Device, text: str) -> str | None:
     for marker in _DEVICE_ERRORS[device.platform]:
         for line in text.splitlines():
@@ -75,33 +64,13 @@ def _device_error(device: Device, text: str) -> str | None:
     return None
 
 
-class ReplayExecutor:
-    mode = "replay"
-
-    def __init__(self, fixtures: Path, delay_s: float = 0.4) -> None:
-        self.fixtures = fixtures
-        self.delay_s = delay_s  # a recorded answer arrives a little later, like a real one
-
-    def run(self, device: Device, command: str) -> RawOutput:
-        check_command(command, device.platform)
-        path = fixture_path(self.fixtures, device.name, command)
-        if not path.is_file():
-            raise NoRecordingError(f"no recorded output of '{command}' on {device.name}")
-        time.sleep(self.delay_s)
-        text = redact(path.read_text(encoding="utf-8"))
-        return RawOutput(
-            command, text, "replay", int(self.delay_s * 1000), _device_error(device, text)
-        )
-
-
 class LiveExecutor:
     mode = "live"
 
-    def __init__(self, eve_host: str, fixtures: Path) -> None:
+    def __init__(self, eve_host: str) -> None:
         if not eve_host:
             raise ValueError("LAB_EVE_HOST is not set: live mode needs the EVE-NG address")
         self.eve_host = eve_host
-        self.fixtures = fixtures
         self._sessions: dict[str, Any] = {}
         self._last_used: dict[str, float] = {}
         self._locks: dict[str, threading.Lock] = {}
@@ -174,9 +143,6 @@ class LiveExecutor:
                         ) from error
             duration_ms = int((time.monotonic() - started) * 1000)
         text = redact(output or "")
-        path = fixture_path(self.fixtures, device.name, command)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8", newline="\n")
         return RawOutput(command, text, "live", duration_ms, _device_error(device, text))
 
     def close(self) -> None:

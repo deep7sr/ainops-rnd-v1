@@ -2,9 +2,7 @@
 #   Neo4j (graph) -> network MCP (8101) -> topology MCP (8102) -> API (8000) -> web UI (5173)
 # Then open http://localhost:5173
 #
-# Live lab or recorded data is chosen in the repo-root .env:
-#   LAB_EXECUTOR=live   and LAB_EVE_HOST=<EVE-NG address>   (live devices)
-#   LAB_EXECUTOR=replay                                    (recorded outputs, no device contacted)
+# AINOPS always works on the live lab: LAB_EVE_HOST=<EVE-NG address> in the repo-root .env.
 
 $repo = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $repo "backend"
