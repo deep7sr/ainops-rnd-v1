@@ -43,6 +43,14 @@ export const api = {
       body: JSON.stringify({ question }),
     }),
   investigations: () => request<RunSummary[]>('/api/investigations'),
+  /** A follow-up in the conversation of an investigation: AINOPS replies in a new turn. */
+  sendMessage: (runId: string, text: string) =>
+    request<{ id: string; turn: number }>(`/api/runs/${runId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+  stopRun: (runId: string) =>
+    request<{ stopping: boolean }>(`/api/runs/${runId}/stop`, { method: 'POST' }),
   audit: () => request<AuditEntry[]>('/api/audit?limit=200'),
   skills: () => request<SkillCatalog>('/api/skills'),
 }
@@ -171,6 +179,8 @@ export interface RunSummary {
   outcome: string | null
   confidence: string | null
   duration_ms: number | null
+  /** Messages the engineer sent: the question plus each follow-up (missing in old answers). */
+  messages?: number
 }
 
 export interface AuditEntry {
@@ -250,7 +260,18 @@ export interface SkillCatalog {
 }
 
 export type RunEvent =
-  | { type: 'started'; question: string; tools: string[]; skills?: string[]; at_ms: number }
+  | {
+      type: 'started'
+      question: string
+      tools: string[]
+      skills?: string[]
+      /** Which message of the conversation this reply answers (missing before conversations). */
+      turn?: number
+      at_ms: number
+    }
+  /** A follow-up from the engineer: everything after it belongs to the next turn. */
+  | { type: 'message'; turn: number; text: string; at: string }
+  | { type: 'stopped'; message: string }
   | { type: 'thought'; text: string; tools: string[]; at_ms: number }
   | {
       type: 'tool_call'

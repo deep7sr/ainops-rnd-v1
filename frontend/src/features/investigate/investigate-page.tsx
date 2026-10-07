@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, History, Loader2, Network, Router, ShieldCheck, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowUp,
+  ChevronDown,
+  History,
+  Loader2,
+  Network,
+  Plus,
+  Router,
+  ShieldCheck,
+  Sparkles,
+  Square,
+} from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
@@ -9,9 +20,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { NetworkMap } from '@/features/topology/network-map'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
+import { conversationTurns, MAX_MESSAGES, type Turn } from './conversation'
 import { deriveInvestigation, touchesNetwork, type Now } from './derive'
 import { DevicePanel } from './device-panel'
-import { ReportCard } from './report-card'
+import { OutcomeBadge, ReportCard } from './report-card'
 import { formatMs } from './format'
 import { NowBanner } from './now-banner'
 import { Timeline } from './timeline'
@@ -181,20 +193,216 @@ function Legend() {
   )
 }
 
+/** One message from the engineer in the conversation. The question is the page's heading. */
+function MessageBubble({ turn }: { turn: Turn }) {
+  const Heading = turn.number === 1 ? 'h1' : 'p'
+  return (
+    <div className="rounded-lg border bg-muted/40 px-4 py-3">
+      <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
+        {turn.number === 1 ? 'Your question' : `Your message ${turn.number}`}
+        {turn.at && (
+          <span className="ml-2 font-normal tracking-normal normal-case">
+            {new Date(turn.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </p>
+      <Heading
+        className={cn(
+          'mt-1 text-balance',
+          turn.number === 1 ? 'text-lg font-semibold' : 'text-[15px] font-medium',
+        )}
+      >
+        {turn.message || '…'}
+      </Heading>
+    </div>
+  )
+}
+
+/** An earlier reply, folded to one line; it opens to the full report. */
+function EarlierReply({
+  turn,
+  onSelectEvidence,
+}: {
+  turn: Turn
+  onSelectEvidence: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const report = turn.verdict?.report
+  const line = report
+    ? (report.root_cause ?? report.summary)
+    : turn.ended === 'stopped'
+      ? 'You stopped this reply before it finished.'
+      : (turn.error ?? 'This reply did not finish.')
+  return (
+    <section aria-label={`Reply to message ${turn.number}`} className="space-y-2">
+      <button
+        type="button"
+        aria-expanded={report ? open : undefined}
+        disabled={!report}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-start gap-3 rounded-lg border bg-card px-4 py-3 text-left hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:hover:bg-card"
+      >
+        {report ? (
+          <OutcomeBadge outcome={report.outcome} />
+        ) : (
+          <span className="shrink-0 rounded-md border px-2.5 py-1 text-sm font-semibold text-muted-foreground">
+            {turn.ended === 'stopped' ? 'Stopped' : 'Failed'}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 pt-1 text-sm">
+          <span className="line-clamp-2">{line}</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {turn.checks.length === 0
+              ? 'No new checks'
+              : `${turn.checks.length} check${turn.checks.length === 1 ? '' : 's'} (${turn.checks[0]}–${turn.checks[turn.checks.length - 1]})`}
+          </span>
+        </span>
+        {report && (
+          <ChevronDown
+            aria-hidden="true"
+            className={cn('mt-1.5 size-4 shrink-0 transition-transform', open && 'rotate-180')}
+          />
+        )}
+      </button>
+      {open && turn.verdict && (
+        <ReportCard verdict={turn.verdict} onSelectEvidence={onSelectEvidence} />
+      )}
+    </section>
+  )
+}
+
+/** Where the engineer answers AINOPS: ask why, correct it, or tell it where to look. */
+function ReplyBox({
+  runId,
+  running,
+  messages,
+  onSent,
+}: {
+  runId: string
+  running: boolean
+  messages: number
+  onSent: (turn: number) => void
+}) {
+  const [text, setText] = useState('')
+  const queryClient = useQueryClient()
+  const send = useMutation({
+    mutationFn: (message: string) => api.sendMessage(runId, message),
+    onSuccess: ({ turn }) => {
+      setText('')
+      onSent(turn)
+      void queryClient.invalidateQueries({ queryKey: ['investigations'] })
+    },
+  })
+  const stop = useMutation({ mutationFn: () => api.stopRun(runId) })
+  const submit = () => {
+    if (text.trim() && !send.isPending) send.mutate(text.trim())
+  }
+
+  if (running) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+          AINOPS is working on {messages > 1 ? 'your message' : 'your question'}. Going the wrong
+          way? Stop it and tell it where to look.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => stop.mutate()} disabled={stop.isPending}>
+          <Square aria-hidden="true" /> Stop
+        </Button>
+        {stop.isError && (
+          <p role="alert" className="text-sm text-status-critical">
+            Could not stop: {stop.error.message}
+          </p>
+        )}
+      </div>
+    )
+  }
+  if (messages >= MAX_MESSAGES) {
+    return (
+      <p className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
+        This conversation has reached {MAX_MESSAGES} messages.{' '}
+        <Link to="/" className="font-medium text-primary underline-offset-4 hover:underline">
+          Start a new investigation
+        </Link>{' '}
+        to go on.
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-1.5">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          submit()
+        }}
+        className="relative"
+      >
+        <label htmlFor="reply" className="sr-only">
+          Reply to AINOPS
+        </label>
+        <Textarea
+          id="reply"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              submit()
+            }
+          }}
+          placeholder="Reply to AINOPS: ask why, correct it, or tell it where to look"
+          className="min-h-12 resize-none bg-card pr-14 text-[15px]"
+          maxLength={500}
+        />
+        <Button
+          type="submit"
+          size="icon"
+          aria-label="Send"
+          disabled={!text.trim() || send.isPending}
+          className="absolute right-2.5 bottom-2.5"
+        >
+          {send.isPending ? (
+            <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+          ) : (
+            <ArrowUp aria-hidden="true" />
+          )}
+        </Button>
+      </form>
+      {send.isError ? (
+        <p role="alert" className="text-sm text-status-critical">
+          Could not send: {send.error.message}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          AINOPS answers from what it already checked, or checks the devices again. It never changes
+          the network.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Run({ runId }: { runId: string }) {
-  const { events, done, error } = useRunEvents(runId)
+  const { events, done, error, resume } = useRunEvents(runId)
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
   const deviceNames = useMemo(
     () => topology.data?.devices.map((d) => d.name) ?? [],
     [topology.data],
   )
   const view = useMemo(() => deriveInvestigation(events, deviceNames), [events, deviceNames])
+  const turns = useMemo(() => conversationTurns(events, deviceNames), [events, deviceNames])
   const [focused, setFocused] = useState<string | null>(null)
   const [panelDevice, setPanelDevice] = useState<string | null>(null)
+  // A message was sent and its turn has not shown up in the events yet.
+  const [awaitingTurn, setAwaitingTurn] = useState<number | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
-  const running = !done && !view.verdict && !view.error && !error
-  const now: Now =
-    error && view.now.kind !== 'done' ? { kind: 'stopped', message: error } : view.now
+  const waiting = awaitingTurn !== null && view.turn < awaitingTurn
+  const running = waiting || (!done && !view.verdict && !view.error && !error)
+  const now: Now = waiting
+    ? { kind: 'starting' }
+    : error && view.now.kind !== 'done'
+      ? { kind: 'stopped', message: error }
+      : view.now
 
   // Follow the live steps while the investigation runs.
   useEffect(() => {
@@ -210,60 +418,96 @@ function Run({ runId }: { runId: string }) {
   const networkCalls = view.steps.filter((s) => s.server === 'network').length
   const refusals = view.steps.filter((s) => s.kind === 'refused').length
   const device = topology.data?.devices.find((d) => d.name === panelDevice) ?? null
+  const latest = turns[turns.length - 1]
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <div className="min-h-0 space-y-4 overflow-y-auto px-6 py-5 lg:border-r">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">Question</p>
-          <h1 className="text-lg font-semibold text-balance">{view.question ?? '…'}</h1>
+      <div className="flex min-h-0 flex-col lg:border-r">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
+              Conversation
+              {turns.length > 1 && (
+                <span className="ml-2 font-normal tracking-normal normal-case">
+                  {turns.length} messages
+                </span>
+              )}
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/">
+                <Plus aria-hidden="true" /> New investigation
+              </Link>
+            </Button>
+          </div>
+
+          {turns.slice(0, -1).map((turn) => (
+            <Fragment key={turn.number}>
+              <MessageBubble turn={turn} />
+              <EarlierReply turn={turn} onSelectEvidence={selectEvidence} />
+            </Fragment>
+          ))}
+          {latest && <MessageBubble turn={latest} />}
+
+          <NowBanner now={now} stepCount={view.steps.length} skill={view.skill} />
+
+          {/* The map appears once the agent looks at the network: a greeting or a refusal has
+              nothing to show on it. It keeps everything checked in the whole conversation. */}
+          {touchesNetwork(view.steps) && (
+            <>
+              <div className="rounded-lg border bg-card p-2">
+                {topology.data ? (
+                  <NetworkMap
+                    topology={topology.data}
+                    highlight={view.highlight}
+                    showEdges={false}
+                    selected={panelDevice}
+                    onSelect={(key) => {
+                      if (deviceNames.includes(key)) setPanelDevice(key)
+                    }}
+                  />
+                ) : (
+                  <Skeleton className="aspect-[1000/560] w-full" />
+                )}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Legend />
+                <p className="text-xs text-muted-foreground">
+                  Click a device to see what was found on it.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                {[
+                  { icon: Network, label: 'Topology MCP calls', value: topologyCalls },
+                  { icon: Router, label: 'Network MCP calls', value: networkCalls },
+                  { icon: ShieldCheck, label: 'Blocked by safety check', value: refusals },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="rounded-md border bg-card px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Icon aria-hidden="true" className="size-3.5" /> {label}
+                    </p>
+                    <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {view.verdict && !waiting && (
+            <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />
+          )}
         </div>
 
-        <NowBanner now={now} stepCount={view.steps.length} skill={view.skill} />
-
-        {/* The map appears once the agent looks at the network: a greeting or a refusal has
-            nothing to show on it. */}
-        {touchesNetwork(view.steps) && (
-          <>
-            <div className="rounded-lg border bg-card p-2">
-              {topology.data ? (
-                <NetworkMap
-                  topology={topology.data}
-                  highlight={view.highlight}
-                  showEdges={false}
-                  selected={panelDevice}
-                  onSelect={(key) => {
-                    if (deviceNames.includes(key)) setPanelDevice(key)
-                  }}
-                />
-              ) : (
-                <Skeleton className="aspect-[1000/560] w-full" />
-              )}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Legend />
-              <p className="text-xs text-muted-foreground">
-                Click a device to see what was found on it.
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              {[
-                { icon: Network, label: 'Topology MCP calls', value: topologyCalls },
-                { icon: Router, label: 'Network MCP calls', value: networkCalls },
-                { icon: ShieldCheck, label: 'Blocked by safety check', value: refusals },
-              ].map(({ icon: Icon, label, value }) => (
-                <div key={label} className="rounded-md border bg-card px-3 py-2">
-                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Icon aria-hidden="true" className="size-3.5" /> {label}
-                  </p>
-                  <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {view.verdict && <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />}
+        <div className="border-t bg-background px-6 py-3">
+          <ReplyBox
+            runId={runId}
+            running={running}
+            messages={turns.length}
+            onSent={(turn) => {
+              setAwaitingTurn(turn)
+              resume()
+            }}
+          />
+        </div>
       </div>
 
       <aside
@@ -275,7 +519,11 @@ function Run({ runId }: { runId: string }) {
             What the agent did, step by step
           </p>
           <p className="text-xs text-muted-foreground">
-            {view.verdict ? `done in ${formatMs(view.verdict.atMs)}` : running ? 'live' : ''}
+            {view.verdict && !waiting
+              ? `done in ${formatMs(view.verdict.atMs)}`
+              : running
+                ? 'live'
+                : ''}
           </p>
         </div>
 
@@ -290,11 +538,6 @@ function Run({ runId }: { runId: string }) {
           </p>
         )}
         <div ref={bottom} />
-        {!running && (
-          <div className="mt-4">
-            <QuestionBox compact />
-          </div>
-        )}
       </aside>
 
       <DevicePanel

@@ -12,7 +12,8 @@ export function HistoryPage() {
       <div>
         <h1 className="text-xl font-semibold">History</h1>
         <p className="text-sm text-muted-foreground">
-          Past investigations. Open one to replay every step, the evidence and the diagnosis.
+          Past investigations. Open one to replay every step, the evidence and the diagnosis, or to
+          go on with the conversation.
         </p>
       </div>
       {runs.isPending ? (
@@ -45,6 +46,7 @@ export function HistoryPage() {
                 </span>
                 <span className="col-span-full text-xs text-muted-foreground">
                   {new Date(run.started_at).toLocaleString()}
+                  {(run.messages ?? 1) > 1 && ` · conversation of ${run.messages} messages`}
                 </span>
               </Link>
             </li>

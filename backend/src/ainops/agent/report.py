@@ -3,9 +3,13 @@
 The LLM writes the Report (it must use this exact structure). Then plain code verifies it:
 - every evidence id it cites must exist (made-up citations are removed and flagged);
 - the confidence is computed by code from the evidence, never taken from the LLM.
+
+In a conversation, evidence from earlier replies stays valid to cite, but the network may have
+changed since: a root cause that rests on checks older than STALE_AFTER gets a lower confidence.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -56,6 +60,16 @@ class EvidenceRecord:
     summary: str
     source: str  # live (graph for topology answers)
     ok: bool
+    at: datetime | None = None  # when the check ran (None: unknown, counted as fresh)
+
+
+STALE_AFTER = timedelta(minutes=15)
+Level = Literal["high", "medium", "low"]
+LOWER: dict[str, Level] = {"high": "medium", "medium": "low", "low": "low"}
+
+
+def _old(record: EvidenceRecord, now: datetime) -> bool:
+    return record.at is not None and now - record.at > STALE_AFTER
 
 
 @dataclass
@@ -65,8 +79,11 @@ class Verdict:
     invalid_citations: list[str]
 
 
-def verify(report: Report, evidence: dict[str, EvidenceRecord]) -> Verdict:
+def verify(
+    report: Report, evidence: dict[str, EvidenceRecord], now: datetime | None = None
+) -> Verdict:
     """Check the citations and compute the confidence (code only, explainable reasons)."""
+    now = now or datetime.now(UTC)
     cited = set(report.root_cause_evidence) | {e for f in report.findings for e in f.evidence}
     invalid = sorted(c for c in cited if c not in evidence)
     report.root_cause_evidence = [e for e in report.root_cause_evidence if e in evidence]
@@ -91,10 +108,23 @@ def verify(report: Report, evidence: dict[str, EvidenceRecord]) -> Verdict:
         else:
             confidence = "low"
             reasons.append("the root cause cites no valid evidence")
+        old = [e.id for e in good if _old(e, now)]
+        if old:
+            confidence = LOWER[confidence]
+            reasons.append(
+                f"{', '.join(old)} taken more than {STALE_AFTER.seconds // 60} minutes ago: "
+                "re-check suggested"
+            )
     elif report.outcome == "no_fault_found":
-        checked = {r.device for r in evidence.values() if r.ok and r.device}
+        ok = [r for r in evidence.values() if r.ok and r.device]
+        checked = {r.device for r in ok if not _old(r, now)}
         confidence = "medium" if len(checked) >= 2 else "low"
         reasons.append(f"{len(checked)} device(s) checked and found healthy")
+        if any(_old(r, now) for r in ok):
+            reasons.append(
+                f"checks older than {STALE_AFTER.seconds // 60} minutes are not counted: "
+                "re-check suggested"
+            )
     else:
         confidence = "low"
         reasons.append("the investigation could not reach a conclusion")

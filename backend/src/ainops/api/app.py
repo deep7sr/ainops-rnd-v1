@@ -9,15 +9,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel, Field
 
+from ainops.agent.conversation import earlier_of
 from ainops.agent.runner import investigate
 from ainops.agent.skills import load_skills
-from ainops.api.runs import Run, RunRegistry
+from ainops.api.runs import Refused, Run, RunRegistry
 from ainops.config import get_settings
 from ainops.inventory import load_inventory
 from ainops.network.audit import AuditLog
@@ -52,9 +53,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="AINOPS API", lifespan=lifespan, docs_url="/api/docs")
 
 
-def _sse(run: Run) -> StreamingResponse:
+def _sse(run: Run, after: int = 0) -> StreamingResponse:
     return StreamingResponse(
-        run.stream(),
+        run.stream(after),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -206,11 +207,54 @@ async def run_detail(run_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/runs/{run_id}/events")
-async def run_events(run_id: str) -> StreamingResponse:
+async def run_events(
+    run_id: str, after: int = 0, last_event_id: str | None = Header(default=None)
+) -> StreamingResponse:
+    """The run's events. `after` (or the browser's Last-Event-ID when it reconnects by itself)
+    skips the ones the viewer already has."""
     run = registry.runs.get(run_id)
     if run is None:
         raise HTTPException(404, "unknown run")
-    return _sse(run)
+    if last_event_id and last_event_id.isdigit():
+        after = max(after, int(last_event_id))
+    return _sse(run, after)
+
+
+class Message(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+
+@app.post("/api/runs/{run_id}/messages")
+async def send_message(run_id: str, body: Message) -> dict[str, Any]:
+    """A follow-up from the engineer: AINOPS replies in a new turn of the same conversation."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(422, "the message is empty")
+    run = registry.runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, "unknown run")
+    # What the conversation holds before this message (the reply is built on it).
+    earlier = earlier_of(run.events, run.title, run.started_at)
+
+    async def work(current: Run) -> None:
+        await investigate(text, current.emit, settings, earlier)
+
+    try:
+        turn = await registry.follow_up(run_id, text, work)
+    except Refused as refused:
+        raise HTTPException(409, str(refused)) from None
+    return {"id": run_id, "turn": turn}
+
+
+@app.post("/api/runs/{run_id}/stop")
+async def stop_run(run_id: str) -> dict[str, bool]:
+    try:
+        registry.stop(run_id)
+    except KeyError:
+        raise HTTPException(404, "unknown run") from None
+    except Refused as refused:
+        raise HTTPException(409, str(refused)) from None
+    return {"stopping": True}
 
 
 # ---------- audit ----------

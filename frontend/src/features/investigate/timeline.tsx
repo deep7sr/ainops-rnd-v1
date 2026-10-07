@@ -11,7 +11,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { JsonView } from '@/components/json-view'
 import { ReviewBadge } from '@/features/skills/skills-page'
 import { StepText } from '@/features/skills/step-text'
@@ -267,19 +267,28 @@ export function Timeline({
 }) {
   return (
     <ol aria-label="Investigation steps">
-      {steps.map((step, index) =>
-        step.kind === 'skill' ? (
-          <SkillItem key={step.key} step={step} last={index === steps.length - 1} />
-        ) : (
-          <StepItem
-            key={step.key}
-            step={step}
-            focused={focused !== null && focused === step.evidenceId}
-            last={index === steps.length - 1}
-            onSelectDevice={onSelectDevice}
-          />
-        ),
-      )}
+      {steps.map((step, index) => (
+        <Fragment key={step.key}>
+          {/* The checks for a follow-up message start under a divider naming that message. */}
+          {step.turn > 1 && step.turn !== steps[index - 1]?.turn && (
+            <li className="my-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <span aria-hidden="true" className="h-px flex-1 bg-border" />
+              For your message {step.turn}
+              <span aria-hidden="true" className="h-px flex-1 bg-border" />
+            </li>
+          )}
+          {step.kind === 'skill' ? (
+            <SkillItem step={step} last={index === steps.length - 1} />
+          ) : (
+            <StepItem
+              step={step}
+              focused={focused !== null && focused === step.evidenceId}
+              last={index === steps.length - 1}
+              onSelectDevice={onSelectDevice}
+            />
+          )}
+        </Fragment>
+      ))}
     </ol>
   )
 }

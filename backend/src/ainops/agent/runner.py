@@ -18,6 +18,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from langchain.agents import create_agent
@@ -30,6 +31,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.types import Command
 
+from ainops.agent.conversation import Earlier, follow_up_prompt
 from ainops.agent.prompts import SYSTEM_PROMPT
 from ainops.agent.report import EvidenceRecord, Report, verify
 from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills, step_tools
@@ -73,6 +75,7 @@ class Investigation:
     skills_used: list[str] = field(default_factory=list)
     skill_loads: int = 0
     current_step: int = 1  # the skill step the agent is on (for steps it does not tag)
+    next_evidence: int = 1  # continues across the turns of a conversation (see conversation.py)
 
     def __post_init__(self) -> None:
         self.known_ips.update(_IPV4.findall(self.question))
@@ -188,7 +191,8 @@ class AinopsMiddleware(AgentMiddleware):
             )
 
         run.tool_calls += 1
-        evidence_id = f"E{len(run.evidence) + 1}"
+        evidence_id = f"E{run.next_evidence}"
+        run.next_evidence += 1
         await run.emit(
             {
                 "type": "tool_call",
@@ -233,6 +237,7 @@ class AinopsMiddleware(AgentMiddleware):
             summary=summary,
             source=source,
             ok=not failed,
+            at=datetime.now(UTC),
         )
         await run.emit(
             {
@@ -397,7 +402,10 @@ def mcp_client(settings: Settings) -> MultiServerMCPClient:
     )
 
 
-async def investigate(question: str, emit: Emit, settings: Settings) -> dict[str, Any]:
+async def investigate(
+    question: str, emit: Emit, settings: Settings, earlier: Earlier | None = None
+) -> dict[str, Any]:
+    """Answer one message: the question, or with `earlier`, a follow-up in a conversation."""
     client = mcp_client(settings)
     topology_tools = await client.get_tools(server_name="topology")
     network_tools = await client.get_tools(server_name="network")
@@ -410,10 +418,19 @@ async def investigate(question: str, emit: Emit, settings: Settings) -> dict[str
         tools.append(with_reason(skill_tool(library)))
         servers[USE_SKILL] = "agent"
     run = Investigation(question=question, emit=emit, tool_servers=servers, skills=library)
+    history: list[Any] = []
+    prompt = SYSTEM_PROMPT + library.prompt_section()
+    if earlier is not None:
+        run.evidence.update(earlier.evidence)
+        run.known_ips.update(earlier.known_ips)
+        run.next_evidence = earlier.next_evidence
+        history = earlier.messages()
+        prompt += follow_up_prompt()
     await emit(
         {
             "type": "started",
             "question": question,
+            "turn": earlier.next_turn if earlier else 1,
             "tools": sorted(servers),
             "skills": sorted(library.skills),
             "at_ms": 0,
@@ -423,12 +440,12 @@ async def investigate(question: str, emit: Emit, settings: Settings) -> dict[str
     agent = create_agent(
         build_model(settings),
         tools,
-        system_prompt=SYSTEM_PROMPT + library.prompt_section(),
+        system_prompt=prompt,
         middleware=[AinopsMiddleware(run)],
         response_format=ToolStrategy(Report),
     )
     result = await agent.ainvoke(
-        {"messages": [HumanMessage(question)]}, config={"recursion_limit": 70}
+        {"messages": [*history, HumanMessage(question)]}, config={"recursion_limit": 70}
     )
     report = result.get("structured_response")
     if not isinstance(report, Report):

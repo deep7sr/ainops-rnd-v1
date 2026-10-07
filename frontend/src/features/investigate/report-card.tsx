@@ -44,6 +44,22 @@ const OUTCOMES: Record<Report['outcome'], { label: string; icon: LucideIcon; cla
 
 const CONFIDENCE_BARS = { high: 3, medium: 2, low: 1 } as const
 
+/** "Root cause found", "No fault found"…: how a reply ended, as a coloured label. */
+export function OutcomeBadge({ outcome }: { outcome: Report['outcome'] }) {
+  const { label, icon: Icon, className } = OUTCOMES[outcome]
+  return (
+    <span
+      className={cn(
+        'flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold',
+        className,
+      )}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+      {label}
+    </span>
+  )
+}
+
 function EvidenceChips({ ids, onSelect }: { ids: string[]; onSelect: (id: string) => void }) {
   return (
     <>
@@ -70,23 +86,13 @@ export function ReportCard({
   onSelectEvidence: (id: string) => void
 }) {
   const { report, confidence, reasons } = verdict
-  const outcome = OUTCOMES[report.outcome]
-  const Icon = outcome.icon
   // A refusal or a plain answer needs no network evidence: no confidence meter.
   const withEvidence = needsEvidence(report.outcome)
 
   return (
     <section aria-label="Diagnosis" className="rounded-lg border bg-card shadow-xs">
       <header className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
-        <span
-          className={cn(
-            'flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold',
-            outcome.className,
-          )}
-        >
-          <Icon aria-hidden="true" className="size-4" />
-          {outcome.label}
-        </span>
+        <OutcomeBadge outcome={report.outcome} />
         {withEvidence && (
           <span className="flex items-center gap-2 text-sm" title={reasons.join('\n')}>
             <span className="flex items-end gap-0.5" aria-hidden="true">

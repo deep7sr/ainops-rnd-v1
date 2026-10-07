@@ -144,6 +144,7 @@ describe('deviceStates', () => {
     durationMs: 1,
     atMs: 1,
     skillStep: null,
+    turn: 1,
   }
   const problem = {
     status: 'problem' as const,

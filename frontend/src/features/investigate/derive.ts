@@ -5,6 +5,10 @@ import { readTrace } from './trace'
 
 // Turns the raw event stream of an investigation into what the page shows: the steps of the
 // timeline, the final report, and what to highlight on the map.
+//
+// An investigation is a conversation: each follow-up message from the engineer starts a new turn.
+// The steps and the map keep everything checked so far; the report, the "Now" line and the
+// error belong to the latest turn.
 
 export interface Step {
   /** 'skill': the agent opened an expert skill (no tool ran). */
@@ -28,6 +32,8 @@ export interface Step {
   atMs: number
   /** Step of the open skill this call carries out; 0 = beyond the skill; null = no skill open. */
   skillStep: number | null
+  /** Which message of the conversation this step answers (1 = the question). */
+  turn: number
 }
 
 /** The expert skill the agent opened (the latest one, if it opened two). */
@@ -67,7 +73,10 @@ export type Now =
   | { kind: 'stopped'; message: string }
 
 export interface InvestigationView {
+  /** The latest message: the question, or the engineer's latest follow-up. */
   question: string | null
+  /** Messages the engineer sent so far (the question counts as 1). */
+  turn: number
   steps: Step[]
   notes: string[]
   verdict: Verdict | null
@@ -136,6 +145,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
   let pathEnds: [string, string] = ['', '']
   let traced = false // a traced route (the way traffic really goes) beats the cabled path
   let skill: ActiveSkill | null = null
+  let turn = 1
   const canonical = new Map(deviceNames.map((name) => [name.toUpperCase(), name]))
   // Events come from the server and from old recordings: anything but a device name is ignored.
   const resolve = (name: unknown) =>
@@ -145,6 +155,14 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
     switch (event.type) {
       case 'started':
         question = event.question
+        break
+      case 'message':
+        // A follow-up: a new turn. Its reply has not started, nor failed, nor reported yet.
+        turn = typeof event.turn === 'number' ? event.turn : turn + 1
+        question = text(event.text)
+        verdict = null
+        error = null
+        skill = null
         break
       case 'thought':
         if (event.text) notes.push(event.text)
@@ -168,6 +186,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           durationMs: null,
           atMs: event.at_ms,
           skillStep: skill ? stepNumber(event.skill_step) : null,
+          turn,
         }
         steps.push(step)
         byId.set(event.id, step)
@@ -226,6 +245,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           durationMs: 0,
           atMs: event.at_ms,
           skillStep: null,
+          turn,
         })
         break
       }
@@ -248,6 +268,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           durationMs: 0,
           atMs: event.at_ms,
           skillStep: skill ? stepNumber(event.skill_step) : null,
+          turn,
         })
         break
       case 'report':
@@ -261,7 +282,15 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         }
         break
       case 'error':
-        error = event.message
+      case 'stopped':
+        error = event.type === 'stopped' ? 'You stopped AINOPS before it finished.' : event.message
+        // A check that never came back is not running any more.
+        for (const step of steps) {
+          if (step.state === 'running') {
+            step.state = 'error'
+            step.summary = event.type === 'stopped' ? 'Did not finish: stopped.' : 'Did not finish.'
+          }
+        }
         break
       default:
         break
@@ -271,6 +300,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
   const fault = blamed(verdict, steps, deviceNames)
   return {
     question,
+    turn,
     steps,
     notes,
     verdict,
