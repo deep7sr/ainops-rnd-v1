@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import {
+  BookOpenCheck,
   History,
   Moon,
   Network,
@@ -36,6 +37,7 @@ import { cn } from '@/lib/utils'
 const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/', label: 'Investigate', icon: Sparkles, end: true },
   { to: '/graph', label: 'Knowledge graph', icon: Network },
+  { to: '/skills', label: 'Skills', icon: BookOpenCheck },
   { to: '/tools', label: 'MCP tools', icon: Wrench },
   { to: '/history', label: 'History', icon: History },
   { to: '/audit', label: 'Audit log', icon: ScrollText },

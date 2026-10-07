@@ -44,6 +44,7 @@ export const api = {
     }),
   investigations: () => request<RunSummary[]>('/api/investigations'),
   audit: () => request<AuditEntry[]>('/api/audit?limit=200'),
+  skills: () => request<SkillCatalog>('/api/skills'),
 }
 
 // ---------- types (mirror the backend) ----------
@@ -217,8 +218,29 @@ export interface Report {
   limitations: string[]
 }
 
+/** An expert skill (backend agent/skills.py, files in skills/<name>/SKILL.md). */
+export interface Skill {
+  name: string
+  description: string
+  intro: string
+  steps: string[]
+  tools: string[]
+  author: string
+  /** Empty while the skill is a draft. */
+  reviewed_by: string
+  path: string
+}
+
+export interface SkillCatalog {
+  skills: Skill[]
+  /** Skills left out, with what to fix. */
+  problems: { folder: string; problems: string[] }[]
+  /** False when the MCP servers were down: tool names could not be checked. */
+  tools_checked: boolean
+}
+
 export type RunEvent =
-  | { type: 'started'; question: string; tools: string[]; at_ms: number }
+  | { type: 'started'; question: string; tools: string[]; skills?: string[]; at_ms: number }
   | { type: 'thought'; text: string; tools: string[]; at_ms: number }
   | {
       type: 'tool_call'
@@ -226,6 +248,18 @@ export type RunEvent =
       tool: string
       server: string
       args: Record<string, unknown>
+      why?: string
+      /** Step of the open skill this call carries out; 0 = beyond it; null/missing = no skill. */
+      skill_step?: number | null
+      at_ms: number
+    }
+  | {
+      type: 'skill'
+      name: string
+      description: string
+      steps: string[]
+      author: string
+      reviewed_by: string
       why?: string
       at_ms: number
     }
@@ -249,6 +283,7 @@ export type RunEvent =
       args: Record<string, unknown>
       reason: string
       why?: string
+      skill_step?: number | null
       at_ms: number
     }
   | {
@@ -257,6 +292,7 @@ export type RunEvent =
       confidence: 'high' | 'medium' | 'low'
       confidence_reasons: string[]
       tool_calls: number
+      skills_used?: string[]
       at_ms: number
     }
   | { type: 'error'; message: string }

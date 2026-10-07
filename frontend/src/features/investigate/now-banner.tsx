@@ -1,6 +1,15 @@
-import { CircleCheck, CircleX, Loader2, ShieldX, Sparkles, TriangleAlert } from 'lucide-react'
+import {
+  BookOpenCheck,
+  CircleCheck,
+  CircleX,
+  Loader2,
+  ShieldX,
+  Sparkles,
+  TriangleAlert,
+} from 'lucide-react'
+import { stepHeadline } from '@/features/skills/headline'
 import { cn } from '@/lib/utils'
-import { needsEvidence, type Now, type Step } from './derive'
+import { needsEvidence, type ActiveSkill, type Now, type Step } from './derive'
 import { formatMs } from './format'
 
 // One line that always says, in plain words, what the agent is doing right now and why. It is the
@@ -41,7 +50,34 @@ function Result({ step }: { step: Step }) {
   )
 }
 
-export function NowBanner({ now, stepCount }: { now: Now; stepCount: number }) {
+/** Which expert skill the agent follows, and which of its steps the current check is. */
+function SkillLine({ skill, step }: { skill: ActiveSkill; step: number | null }) {
+  return (
+    <p className="mt-1 flex items-start gap-1.5 text-sm text-provenance-ai">
+      <BookOpenCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <span>
+        Following skill <span className="font-mono font-semibold">{skill.name}</span>
+        {step !== null && step > 0 && (
+          <>
+            {' '}
+            · step {step} of {skill.steps.length}: {stepHeadline(skill.steps[step - 1] ?? '')}
+          </>
+        )}
+        {step === 0 && ' · going beyond its steps'}
+      </span>
+    </p>
+  )
+}
+
+export function NowBanner({
+  now,
+  stepCount,
+  skill = null,
+}: {
+  now: Now
+  stepCount: number
+  skill?: ActiveSkill | null
+}) {
   return (
     <section
       aria-label="What the agent is doing now"
@@ -69,6 +105,10 @@ export function NowBanner({ now, stepCount }: { now: Now; stepCount: number }) {
           <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
           Reading the question and choosing the first check…
         </p>
+      )}
+
+      {skill && (now.kind === 'working' || now.kind === 'thinking') && (
+        <SkillLine skill={skill} step={now.kind === 'working' ? now.step.skillStep : null} />
       )}
 
       {now.kind === 'working' && (
@@ -116,7 +156,11 @@ export function NowBanner({ now, stepCount }: { now: Now; stepCount: number }) {
           </p>
           <p className="text-sm text-muted-foreground">
             {needsEvidence(now.verdict.report.outcome)
-              ? `${now.verdict.toolCalls} ${now.verdict.toolCalls === 1 ? 'check' : 'checks'} in ${formatMs(now.verdict.atMs)} · confidence ${now.verdict.confidence}`
+              ? `${now.verdict.toolCalls} ${now.verdict.toolCalls === 1 ? 'check' : 'checks'} in ${formatMs(now.verdict.atMs)} · confidence ${now.verdict.confidence}${
+                  now.verdict.skillsUsed.length
+                    ? ` · skill ${now.verdict.skillsUsed.join(', ')}`
+                    : ''
+                }`
               : now.verdict.report.outcome === 'refused'
                 ? 'Refused before running any check: AINOPS only reads the network'
                 : `Answered in ${formatMs(now.verdict.atMs)} without checking any device`}

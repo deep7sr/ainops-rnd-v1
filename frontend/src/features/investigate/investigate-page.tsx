@@ -219,7 +219,7 @@ function Run({ runId }: { runId: string }) {
           <h1 className="text-lg font-semibold text-balance">{view.question ?? '…'}</h1>
         </div>
 
-        <NowBanner now={now} stepCount={view.steps.length} />
+        <NowBanner now={now} stepCount={view.steps.length} skill={view.skill} />
 
         {/* The map appears once the agent looks at the network: a greeting or a refusal has
             nothing to show on it. */}

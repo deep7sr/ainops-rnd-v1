@@ -16,6 +16,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel, Field
 
 from ainops.agent.runner import investigate
+from ainops.agent.skills import load_skills
 from ainops.api.runs import Run, RunRegistry
 from ainops.config import get_settings
 from ainops.inventory import load_inventory
@@ -125,6 +126,31 @@ async def call_tool(server: str, tool: str, call: ToolCall) -> dict[str, Any]:
         result = await session.call_tool(tool, call.arguments)
     text = "\n".join(getattr(block, "text", "") for block in result.content)
     return {"is_error": result.isError, "structured": result.structuredContent, "text": text}
+
+
+# ---------- expert skills ----------
+
+
+@app.get("/api/skills")
+async def skills() -> dict[str, Any]:
+    """The skills the agent can use, and the ones left out with their problems.
+
+    Tool names are checked against the running MCP servers; if one is down they cannot be checked
+    (tools_checked is false) and only the format is.
+    """
+    known: set[str] | None = set()
+    for url in MCP_SERVERS.values():
+        try:
+            known = (known or set()) | {t["name"] for t in await _list_tools(url)}
+        except Exception:  # noqa: BLE001 - reported as tools_checked=false
+            known = None
+            break
+    library = load_skills(settings.skills_dir, known)
+    return {
+        "skills": [s.model_dump() for s in library.skills.values()],
+        "problems": [p.model_dump() for p in library.problems],
+        "tools_checked": library.tools_checked,
+    }
 
 
 # ---------- knowledge graph ----------

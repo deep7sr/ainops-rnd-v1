@@ -143,6 +143,7 @@ describe('deviceStates', () => {
     device: 'IPLC-RTR-MAA',
     durationMs: 1,
     atMs: 1,
+    skillStep: null,
   }
   const problem = {
     status: 'problem' as const,

@@ -1,4 +1,5 @@
 import {
+  BookOpenCheck,
   ChevronDown,
   CircleCheck,
   CircleX,
@@ -12,6 +13,8 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { JsonView } from '@/components/json-view'
+import { ReviewBadge } from '@/features/skills/skills-page'
+import { StepText } from '@/features/skills/step-text'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { Step } from './derive'
@@ -26,6 +29,65 @@ function argText(args: Record<string, unknown>): string {
     .filter(([key]) => key !== 'device')
     .map(([key, value]) => `${key}=${String(value)}`)
     .join(' ')
+}
+
+/** The agent opened an expert skill: which one, why, and the steps it will follow. */
+function SkillItem({ step, last }: { step: Step; last: boolean }) {
+  const steps = Array.isArray(step.data) ? (step.data as string[]) : []
+  return (
+    <li className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-provenance-ai/40 bg-secondary text-provenance-ai">
+          <BookOpenCheck aria-hidden="true" className="size-4" />
+        </span>
+        {!last && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
+      </div>
+      <div className="mb-3 min-w-0 flex-1 rounded-md border border-transparent px-3 py-2.5">
+        <p className="text-sm font-medium">{step.sentence}</p>
+        {step.why && (
+          <p className="mt-0.5 flex items-start gap-1.5 text-sm text-provenance-ai">
+            <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              <span className="font-semibold">Why: </span>
+              {step.why}
+            </span>
+          </p>
+        )}
+        <div className="mt-2 rounded-md border bg-background/60 px-3 py-2 text-sm">
+          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <ReviewBadge reviewedBy={String(step.args.reviewed_by ?? '')} />
+            {step.summary}
+          </p>
+          <ol aria-label={`Steps of the skill`} className="mt-1.5 space-y-1">
+            {steps.map((text, index) => (
+              <li key={index} className="flex gap-2">
+                <span className="w-4 shrink-0 text-right font-mono text-xs leading-5 text-muted-foreground">
+                  {index + 1}
+                </span>
+                <span className="min-w-0">
+                  <StepText text={text} />
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+/** Which step of the open skill a check carries out, or that it goes beyond the skill. */
+function SkillStepTag({ step }: { step: number | null }) {
+  if (step === null) return null
+  return step > 0 ? (
+    <span className="rounded border border-provenance-ai/40 px-1.5 py-px text-[11px] font-medium text-provenance-ai">
+      Skill step {step}
+    </span>
+  ) : (
+    <span className="rounded border px-1.5 py-px text-[11px] font-medium text-muted-foreground">
+      Beyond the skill
+    </span>
+  )
 }
 
 function StepItem({
@@ -84,6 +146,7 @@ function StepItem({
               {step.evidenceId}
             </span>
           )}
+          <SkillStepTag step={step.skillStep} />
           {step.kind === 'refused' ? (
             <span className="font-medium text-status-critical">
               Blocked by the AINOPS safety check
@@ -204,15 +267,19 @@ export function Timeline({
 }) {
   return (
     <ol aria-label="Investigation steps">
-      {steps.map((step, index) => (
-        <StepItem
-          key={step.key}
-          step={step}
-          focused={focused !== null && focused === step.evidenceId}
-          last={index === steps.length - 1}
-          onSelectDevice={onSelectDevice}
-        />
-      ))}
+      {steps.map((step, index) =>
+        step.kind === 'skill' ? (
+          <SkillItem key={step.key} step={step} last={index === steps.length - 1} />
+        ) : (
+          <StepItem
+            key={step.key}
+            step={step}
+            focused={focused !== null && focused === step.evidenceId}
+            last={index === steps.length - 1}
+            onSelectDevice={onSelectDevice}
+          />
+        ),
+      )}
     </ol>
   )
 }

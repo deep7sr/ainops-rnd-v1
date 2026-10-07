@@ -25,19 +25,22 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.types import Command
 
 from ainops.agent.prompts import SYSTEM_PROMPT
 from ainops.agent.report import EvidenceRecord, Report, verify
+from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills
 from ainops.config import Settings
 
 Event = dict[str, Any]
 Emit = Callable[[Event], Awaitable[None]]
 
 MAX_TOOL_CALLS = 16
+MAX_SKILL_LOADS = 2  # opening a skill is not a network check and does not use the tool budget
+USE_SKILL = "use_skill"
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _IP_ARGS = ("destination", "source", "query")
 
@@ -65,12 +68,29 @@ class Investigation:
     known_ips: set[str] = field(default_factory=set)
     tool_calls: int = 0
     started: float = field(default_factory=time.monotonic)
+    skills: SkillLibrary = field(default_factory=SkillLibrary)
+    active_skill: Skill | None = None
+    skills_used: list[str] = field(default_factory=list)
+    skill_loads: int = 0
 
     def __post_init__(self) -> None:
         self.known_ips.update(_IPV4.findall(self.question))
 
     def elapsed_ms(self) -> int:
         return int((time.monotonic() - self.started) * 1000)
+
+    def step_of(self, value: Any) -> int | None:
+        """The skill step a tool call says it carries out: None without an open skill, 0 when the
+        call goes beyond the skill (or names a step the skill does not have)."""
+        if self.active_skill is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int | str):
+            return 0
+        try:
+            number = int(value)
+        except ValueError:
+            return 0
+        return number if 1 <= number <= len(self.active_skill.steps) else 0
 
     def check(self, tool: str, args: dict[str, Any]) -> str | None:
         """AINOPS safety check before a tool call reaches an MCP server. None means allowed."""
@@ -124,6 +144,10 @@ class AinopsMiddleware(AgentMiddleware):
         server = run.tool_servers.get(name, "?")
         # "reason" exists only on the agent side (see with_reason): shown, never sent to MCP.
         reason = str(args.pop("reason", "") or "").strip()
+        # So is "skill_step": which step of the open skill this call carries out.
+        skill_step = run.step_of(args.pop("skill_step", None))
+        if name == USE_SKILL:
+            return await self._use_skill(str(call_id), args, reason)
         request = request.override(tool_call={**call, "args": args})
 
         refusal = run.check(name, args)
@@ -135,6 +159,7 @@ class AinopsMiddleware(AgentMiddleware):
                     "args": args,
                     "reason": refusal,
                     "why": reason,
+                    "skill_step": skill_step,
                     "at_ms": run.elapsed_ms(),
                 }  # fmt: skip
             )
@@ -155,6 +180,7 @@ class AinopsMiddleware(AgentMiddleware):
                 "server": server,
                 "args": args,
                 "why": reason,
+                "skill_step": skill_step,
                 "at_ms": run.elapsed_ms(),
             }  # fmt: skip
         )
@@ -212,6 +238,50 @@ class AinopsMiddleware(AgentMiddleware):
         compact = _compact(payload) if payload is not None else text[:1500]
         return result.model_copy(update={"content": f"[{evidence_id}] {compact}"})
 
+    async def _use_skill(self, call_id: str, args: dict[str, Any], reason: str) -> ToolMessage:
+        """Open a skill: never reaches an MCP server; the UI shows which skill and its steps."""
+        run = self.run
+        wanted = str(args.get("skill") or "")
+        skill = run.skills.get(wanted)
+        refusal = None
+        if run.skill_loads >= MAX_SKILL_LOADS:
+            refusal = f"at most {MAX_SKILL_LOADS} skills per investigation: continue with the tools"
+        elif skill is None:
+            names = ", ".join(run.skills.skills) or "none"
+            refusal = f"there is no skill '{wanted}' (skills: {names})"
+        if refusal or skill is None:
+            await run.emit(
+                {
+                    "type": "refused",
+                    "tool": USE_SKILL,
+                    "args": args,
+                    "reason": refusal,
+                    "why": reason,
+                    "skill_step": None,
+                    "at_ms": run.elapsed_ms(),
+                }  # fmt: skip
+            )
+            return ToolMessage(
+                content=f"REFUSED: {refusal}", tool_call_id=call_id, name=USE_SKILL, status="error"
+            )
+        run.skill_loads += 1
+        run.active_skill = skill
+        if skill.name not in run.skills_used:
+            run.skills_used.append(skill.name)
+        await run.emit(
+            {
+                "type": "skill",
+                "name": skill.name,
+                "description": skill.description,
+                "steps": skill.steps,
+                "author": skill.author,
+                "reviewed_by": skill.reviewed_by,
+                "why": reason,
+                "at_ms": run.elapsed_ms(),
+            }  # fmt: skip
+        )
+        return ToolMessage(content=instructions(skill), tool_call_id=call_id, name=USE_SKILL)
+
 
 def _compact(payload: Any) -> str:
     """Only what the LLM needs, as dense JSON."""
@@ -222,11 +292,12 @@ def _compact(payload: Any) -> str:
     return json.dumps(payload, separators=(",", ":"), default=str)[:6000]
 
 
-def with_reason(tool: BaseTool) -> BaseTool:
+def with_reason(tool: BaseTool, skill_step: bool = False) -> BaseTool:
     """Add a required `reason` argument to a tool's schema, for the agent only.
 
     The LLM must say in one sentence why it calls the tool; the UI shows it next to the step, so
     the engineer can follow the investigation. The middleware removes it before the MCP call.
+    With `skill_step`, also an optional `skill_step`: which step of the open skill the call does.
     """
     schema = tool.args_schema
     if not isinstance(schema, dict):
@@ -239,9 +310,37 @@ def with_reason(tool: BaseTool) -> BaseTool:
         },
         **schema.get("properties", {}),
     }
+    if skill_step:
+        properties["skill_step"] = {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The step of the open skill this call carries out; 0 if none",
+        }
     schema["properties"] = properties
     schema["required"] = ["reason", *[r for r in schema.get("required", []) if r != "reason"]]
     return tool.model_copy(update={"args_schema": schema})
+
+
+def skill_tool(library: SkillLibrary) -> BaseTool:
+    """use_skill: opens one of the listed skills (handled by AinopsMiddleware, never MCP)."""
+
+    async def use_skill(skill: str) -> str:
+        found = library.get(skill)
+        return instructions(found) if found else f"there is no skill '{skill}'"
+
+    return StructuredTool(
+        name=USE_SKILL,
+        description=(
+            "Open an expert skill: the step-by-step procedure the network engineers wrote for "
+            "this kind of question. Use it first when one of the listed skills fits."
+        ),
+        args_schema={
+            "type": "object",
+            "properties": {"skill": {"type": "string", "description": "Name of the skill"}},
+            "required": ["skill"],
+        },
+        coroutine=use_skill,
+    )
 
 
 def build_model(settings: Settings) -> BaseChatModel:
@@ -286,13 +385,27 @@ async def investigate(question: str, emit: Emit, settings: Settings) -> dict[str
     network_tools = await client.get_tools(server_name="network")
     servers = {t.name: "topology" for t in topology_tools}
     servers.update({t.name: "network" for t in network_tools})
-    run = Investigation(question=question, emit=emit, tool_servers=servers)
-    await emit({"type": "started", "question": question, "tools": sorted(servers), "at_ms": 0})
+    library = load_skills(settings.skills_dir, servers)
+    has_skills = bool(library.skills)
+    tools = [with_reason(t, skill_step=has_skills) for t in [*topology_tools, *network_tools]]
+    if has_skills:
+        tools.append(with_reason(skill_tool(library)))
+        servers[USE_SKILL] = "agent"
+    run = Investigation(question=question, emit=emit, tool_servers=servers, skills=library)
+    await emit(
+        {
+            "type": "started",
+            "question": question,
+            "tools": sorted(servers),
+            "skills": sorted(library.skills),
+            "at_ms": 0,
+        }
+    )
 
     agent = create_agent(
         build_model(settings),
-        [with_reason(t) for t in [*topology_tools, *network_tools]],
-        system_prompt=SYSTEM_PROMPT,
+        tools,
+        system_prompt=SYSTEM_PROMPT + library.prompt_section(),
         middleware=[AinopsMiddleware(run)],
         response_format=ToolStrategy(Report),
     )
@@ -315,6 +428,7 @@ async def investigate(question: str, emit: Emit, settings: Settings) -> dict[str
         "confidence_reasons": verdict.reasons,
         "evidence": {k: vars(v) for k, v in run.evidence.items()},
         "tool_calls": run.tool_calls,
+        "skills_used": run.skills_used,
         "at_ms": run.elapsed_ms(),
     }
     await emit(final)

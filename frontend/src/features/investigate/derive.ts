@@ -7,7 +7,8 @@ import { readTrace } from './trace'
 // timeline, the final report, and what to highlight on the map.
 
 export interface Step {
-  kind: 'tool' | 'refused'
+  /** 'skill': the agent opened an expert skill (no tool ran). */
+  kind: 'tool' | 'refused' | 'skill'
   key: string
   evidenceId: string | null
   tool: string
@@ -25,6 +26,17 @@ export interface Step {
   device: string | null
   durationMs: number | null
   atMs: number
+  /** Step of the open skill this call carries out; 0 = beyond the skill; null = no skill open. */
+  skillStep: number | null
+}
+
+/** The expert skill the agent opened (the latest one, if it opened two). */
+export interface ActiveSkill {
+  name: string
+  description: string
+  steps: string[]
+  author: string
+  reviewedBy: string
 }
 
 export interface Verdict {
@@ -32,6 +44,7 @@ export interface Verdict {
   confidence: 'high' | 'medium' | 'low'
   reasons: string[]
   toolCalls: number
+  skillsUsed: string[]
   atMs: number
 }
 
@@ -60,6 +73,7 @@ export interface InvestigationView {
   verdict: Verdict | null
   error: string | null
   now: Now
+  skill: ActiveSkill | null
   highlight: MapHighlight
 }
 
@@ -101,6 +115,12 @@ export function parseAffected(affected: string[], deviceNames: string[]) {
   return { devices, interfaces }
 }
 
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+const stepNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null
+
 function deviceOf(args: Record<string, unknown>): string | null {
   return typeof args.device === 'string' ? args.device : null
 }
@@ -115,6 +135,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
   let path: string[] = []
   let pathEnds: [string, string] = ['', '']
   let traced = false // a traced route (the way traffic really goes) beats the cabled path
+  let skill: ActiveSkill | null = null
   const canonical = new Map(deviceNames.map((name) => [name.toUpperCase(), name]))
   // Events come from the server and from old recordings: anything but a device name is ignored.
   const resolve = (name: unknown) =>
@@ -146,6 +167,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           device: resolve(deviceOf(event.args)) ?? traceStart(event.tool, event.args, canonical),
           durationMs: null,
           atMs: event.at_ms,
+          skillStep: skill ? stepNumber(event.skill_step) : null,
         }
         steps.push(step)
         byId.set(event.id, step)
@@ -176,6 +198,37 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         }
         break
       }
+      case 'skill': {
+        const name = text(event.name)
+        if (!name) break
+        skill = {
+          name,
+          description: text(event.description),
+          steps: strings(event.steps),
+          author: text(event.author),
+          reviewedBy: text(event.reviewed_by),
+        }
+        steps.push({
+          kind: 'skill',
+          key: `skill-${steps.length}`,
+          evidenceId: null,
+          tool: 'use_skill',
+          server: 'agent',
+          args: { skill: name, reviewed_by: skill.reviewedBy },
+          why: text(event.why),
+          sentence: `Using the expert skill "${name}"`,
+          state: 'ok',
+          summary: skill.description,
+          data: skill.steps,
+          evidence: null,
+          health: null,
+          device: null,
+          durationMs: 0,
+          atMs: event.at_ms,
+          skillStep: null,
+        })
+        break
+      }
       case 'refused':
         steps.push({
           kind: 'refused',
@@ -194,6 +247,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           device: resolve(deviceOf(event.args)),
           durationMs: 0,
           atMs: event.at_ms,
+          skillStep: skill ? stepNumber(event.skill_step) : null,
         })
         break
       case 'report':
@@ -202,6 +256,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           confidence: event.confidence,
           reasons: event.confidence_reasons,
           toolCalls: event.tool_calls,
+          skillsUsed: strings(event.skills_used),
           atMs: event.at_ms,
         }
         break
@@ -221,6 +276,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
     verdict,
     error,
     now: nowOf(steps, verdict, error),
+    skill,
     highlight: {
       path,
       states: deviceStates(steps),

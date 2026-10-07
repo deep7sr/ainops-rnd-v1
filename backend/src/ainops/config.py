@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     lab_inventory: Path = REPO_ROOT / "lab" / "inventory.yaml"
     fixtures_dir: Path = REPO_ROOT / "fixtures" / "lab"
     logs_dir: Path = REPO_ROOT / "logs"
+    # Expert skills for frequent questions (skills/<name>/SKILL.md, see agent/skills.py).
+    skills_dir: Path = REPO_ROOT / "skills"
 
     # MCP servers (streamable HTTP, local only).
     mcp_network_port: int = 8101

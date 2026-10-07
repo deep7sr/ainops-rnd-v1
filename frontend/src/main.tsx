@@ -8,6 +8,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuditPage } from '@/features/audit/audit-page'
 import { HistoryPage } from '@/features/history/history-page'
 import { InvestigatePage } from '@/features/investigate/investigate-page'
+import { SkillsPage } from '@/features/skills/skills-page'
 import { ToolsPage } from '@/features/tools/tools-page'
 import { TopologyPage } from '@/features/topology/topology-page'
 import './index.css'
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: '/', element: <InvestigatePage /> },
       { path: '/investigations/:id', element: <InvestigatePage /> },
       { path: '/graph', element: <TopologyPage /> },
+      { path: '/skills', element: <SkillsPage /> },
       { path: '/tools', element: <ToolsPage /> },
       { path: '/history', element: <HistoryPage /> },
       { path: '/audit', element: <AuditPage /> },
