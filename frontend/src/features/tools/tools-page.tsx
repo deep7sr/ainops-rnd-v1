@@ -204,10 +204,11 @@ export function ToolsPage() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 px-6 py-6">
       <div>
-        <h1 className="text-xl font-semibold">MCP tools</h1>
+        <h1 className="text-xl font-semibold">AI tools</h1>
         <p className="text-sm text-muted-foreground">
-          Everything the agent can do. Each tool is a name, a description and typed inputs: the LLM
-          picks tools by reading these definitions. The device commands stay inside the servers.
+          Everything the agent can do, served by the MCP servers. Each tool is a name, a description
+          and typed inputs: the LLM picks tools by reading these definitions. The device commands
+          stay inside the servers.
         </p>
       </div>
       {catalog.isPending ? (

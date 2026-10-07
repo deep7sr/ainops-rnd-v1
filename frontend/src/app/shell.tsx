@@ -22,6 +22,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -34,16 +35,35 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useTheme } from '@/app/theme/theme-context'
 import { cn } from '@/lib/utils'
 
-const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
-  { to: '/', label: 'Investigate', icon: Sparkles, end: true },
-  { to: '/graph', label: 'Knowledge graph', icon: Network },
-  { to: '/skills', label: 'Skills', icon: BookOpenCheck },
-  { to: '/tools', label: 'MCP tools', icon: Wrench },
-  { to: '/history', label: 'History', icon: History },
-  { to: '/audit', label: 'Audit log', icon: ScrollText },
-]
+interface NavItem {
+  to: string
+  label: string
+  icon: LucideIcon
+  end?: boolean
+}
 
-function isActive(path: string, item: (typeof NAV)[number]) {
+// What engineers use every day comes first; how AINOPS works underneath is in the second group.
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Troubleshoot',
+    items: [
+      { to: '/', label: 'Investigate', icon: Sparkles, end: true },
+      { to: '/history', label: 'History', icon: History },
+    ],
+  },
+  {
+    label: 'Behind the scenes',
+    items: [
+      { to: '/graph', label: 'Network map', icon: Network },
+      { to: '/skills', label: 'Skills', icon: BookOpenCheck },
+      { to: '/tools', label: 'AI tools', icon: Wrench },
+      { to: '/audit', label: 'Audit log', icon: ScrollText },
+    ],
+  },
+]
+const NAV = NAV_GROUPS.flatMap((group) => group.items)
+
+function isActive(path: string, item: NavItem) {
   if (item.end) return path === '/' || path.startsWith('/investigations')
   return path.startsWith(item.to)
 }
@@ -133,26 +153,29 @@ export function Shell() {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {NAV.map((item) => (
-                  <SidebarMenuItem key={item.to}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive(location.pathname, item)}
-                      tooltip={item.label}
-                    >
-                      <NavLink to={item.to} end={item.end}>
-                        <item.icon aria-hidden="true" />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {NAV_GROUPS.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(location.pathname, item)}
+                        tooltip={item.label}
+                      >
+                        <NavLink to={item.to} end={item.end}>
+                          <item.icon aria-hidden="true" />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
         <SidebarFooter className="px-3 py-3 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">
           Read-only. AINOPS never changes a device.

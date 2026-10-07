@@ -199,10 +199,11 @@ export function TopologyPage() {
     <div className="mx-auto max-w-[1400px] space-y-5 px-6 py-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Knowledge graph</h1>
+          <h1 className="text-xl font-semibold">Network map</h1>
           <p className="text-sm text-muted-foreground">
-            Built automatically by discovery (CDP/LLDP neighbours and shared subnets), stored in
-            Neo4j. The agent reads it to find the path before it checks devices live.
+            The knowledge graph of the network, built automatically by discovery (CDP/LLDP
+            neighbours and shared subnets), stored in Neo4j. The agent reads it to find the path
+            before it checks devices live.
           </p>
         </div>
         <div className="flex gap-2">
