@@ -211,13 +211,60 @@ def test_each_check_carries_its_skill_step_which_never_reaches_mcp(tmp_path: Pat
     _call(run, "get_interfaces", {"device": "R1", "skill_step": 1}, sent)
     assert events[0]["skill_step"] is None  # no skill open yet
 
+    # link-check: step 1 names get_interfaces; step 2 names ping and get_interfaces.
     _call(run, USE_SKILL, {"skill": "link-check"}, sent)
-    for step, expected in [(2, 2), (0, 0), (9, 0), ("1", 1), (True, 0), (None, 0), ("x", 0)]:
-        _call(run, "ping", {"device": "R1", "destination": "10.0.0.1", "skill_step": step}, sent)
+    for tool, given, expected in [
+        ("get_interfaces", None, 1),  # not tagged: the first step naming it
+        ("ping", 0, 2),  # "0" is treated like no tag: ping is step 2
+        ("get_interfaces", None, 2),  # from the current step on, step 2 names it too
+        ("get_interfaces", 1, 1),  # a tag that fits the tool is used: back to step 1
+        ("ping", "1", 2),  # a tag that does not fit the tool (step 1 has no ping) is not
+        ("ping", 9, 2),  # no step 9
+        ("ping", True, 2),
+        ("ping", "x", 2),
+        ("trace_route", None, 0),  # no step names it: beyond the skill
+        ("trace_route", 2, 0),  # even when the model says step 2
+    ]:
+        args = {"device": "R1", "destination": "10.0.0.1", "skill_step": given}
+        _call(run, tool, args, sent)
         call_event = [e for e in events if e["type"] in ("tool_call", "refused")][-1]
-        assert call_event["skill_step"] == expected, step
+        assert call_event["skill_step"] == expected, (tool, given)
     assert all("skill_step" not in args for args in sent)
     assert all("reason" not in args for args in sent)
+
+
+def test_a_step_named_only_earlier_is_a_re_check_of_that_step(tmp_path: Path) -> None:
+    events: list[dict[str, Any]] = []
+    run = _run(tmp_path, events)
+    _call(run, USE_SKILL, {"skill": "link-check"}, [])
+    run.current_step = 2
+    skill = run.active_skill
+    assert skill is not None
+    run.active_skill = skill.model_copy(update={"steps": ["`ping` it.", "`get_interfaces`."]})
+    assert run.step_of(None, "ping") == 1
+
+
+def test_the_real_run_of_10_07_gets_its_steps_back() -> None:
+    """inv-6d798971: the model tagged only its first check; the rest arrived without a step."""
+    from ainops.network import server as network
+    from ainops.topology import server as topology
+
+    tools = {t.name for t in asyncio.run(network.mcp.list_tools())}
+    tools |= {t.name for t in asyncio.run(topology.mcp.list_tools())}
+    library = load_skills(REPO_ROOT / "skills", tools)
+    run = Investigation(question="?", emit=lambda e: None, tool_servers={}, skills=library)  # type: ignore[arg-type, return-value]
+    run.active_skill = library.get("leased-line-health")
+    calls = [
+        ("get_device_links", 1),
+        ("get_interfaces", 0),
+        ("get_interfaces", 0),
+        ("get_interface_detail", 0),
+        ("get_interface_detail", 0),
+        ("get_ospf_neighbors", 0),
+        ("get_ospf_neighbors", 0),
+        ("ping", 0),
+    ]
+    assert [run.step_of(given, tool) for tool, given in calls] == [1, 2, 2, 3, 3, 4, 4, 5]
 
 
 def test_an_unknown_skill_is_refused_and_named(tmp_path: Path) -> None:
@@ -306,3 +353,11 @@ def test_a_tool_named_twice_is_reported_once() -> None:
     assert problems == [
         "`get_routez` is not a tool: backticks are only for tool names (see the MCP tools page)"
     ]
+
+
+def test_opening_a_skill_starts_at_its_first_step(tmp_path: Path) -> None:
+    run = _run(tmp_path, [])
+    _call(run, USE_SKILL, {"skill": "link-check"}, [])
+    run.current_step = 2
+    _call(run, USE_SKILL, {"skill": "link-check"}, [])
+    assert run.step_of(None, "get_interfaces") == 1

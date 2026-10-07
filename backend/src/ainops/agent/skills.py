@@ -84,6 +84,14 @@ class SkillLibrary:
         return "\n".join(lines) + "\n"
 
 
+def step_tools(skill: Skill) -> list[set[str]]:
+    """The tools each step names (index 0 = step 1)."""
+    return [
+        {name.strip() for name in _TICKED.findall(step) if name.strip() in skill.tools}
+        for step in skill.steps
+    ]
+
+
 def instructions(skill: Skill) -> str:
     """What use_skill returns to the agent."""
     steps = "\n".join(f"{n}. {text}" for n, text in enumerate(skill.steps, start=1))

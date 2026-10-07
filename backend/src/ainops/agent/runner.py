@@ -32,7 +32,7 @@ from langgraph.types import Command
 
 from ainops.agent.prompts import SYSTEM_PROMPT
 from ainops.agent.report import EvidenceRecord, Report, verify
-from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills
+from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills, step_tools
 from ainops.config import Settings
 
 Event = dict[str, Any]
@@ -72,6 +72,7 @@ class Investigation:
     active_skill: Skill | None = None
     skills_used: list[str] = field(default_factory=list)
     skill_loads: int = 0
+    current_step: int = 1  # the skill step the agent is on (for steps it does not tag)
 
     def __post_init__(self) -> None:
         self.known_ips.update(_IPV4.findall(self.question))
@@ -79,18 +80,34 @@ class Investigation:
     def elapsed_ms(self) -> int:
         return int((time.monotonic() - self.started) * 1000)
 
-    def step_of(self, value: Any) -> int | None:
-        """The skill step a tool call says it carries out: None without an open skill, 0 when the
-        call goes beyond the skill (or names a step the skill does not have)."""
+    def step_of(self, value: Any, tool: str) -> int | None:
+        """The skill step a tool call carries out: None without an open skill, 0 beyond it.
+
+        Models often leave the optional skill_step out (or send 0), so code works it out from the
+        tool: the first step from the current one on that names this tool, else the latest earlier
+        one (a re-check). A number the model gives is used when that step names this tool (or
+        names no tool at all). A tool no step names goes beyond the skill.
+        """
         if self.active_skill is None:
             return None
-        if isinstance(value, bool) or not isinstance(value, int | str):
-            return 0
-        try:
-            number = int(value)
-        except ValueError:
-            return 0
-        return number if 1 <= number <= len(self.active_skill.steps) else 0
+        tools = step_tools(self.active_skill)
+        given = None
+        if not isinstance(value, bool) and isinstance(value, int | str):
+            try:
+                given = int(value)
+            except ValueError:
+                given = None
+        named = tools[given - 1] if given is not None and 1 <= given <= len(tools) else None
+        if given is not None and named is not None and (tool in named or not named):
+            step = given
+        else:
+            candidates = [n for n, names in enumerate(tools, start=1) if tool in names]
+            later = [n for n in candidates if n >= self.current_step]
+            earlier = [n for n in candidates if n < self.current_step]
+            step = later[0] if later else earlier[-1] if earlier else 0
+        if step:
+            self.current_step = step
+        return step
 
     def check(self, tool: str, args: dict[str, Any]) -> str | None:
         """AINOPS safety check before a tool call reaches an MCP server. None means allowed."""
@@ -145,7 +162,7 @@ class AinopsMiddleware(AgentMiddleware):
         # "reason" exists only on the agent side (see with_reason): shown, never sent to MCP.
         reason = str(args.pop("reason", "") or "").strip()
         # So is "skill_step": which step of the open skill this call carries out.
-        skill_step = run.step_of(args.pop("skill_step", None))
+        skill_step = run.step_of(args.pop("skill_step", None), name)
         if name == USE_SKILL:
             return await self._use_skill(str(call_id), args, reason)
         request = request.override(tool_call={**call, "args": args})
@@ -266,6 +283,7 @@ class AinopsMiddleware(AgentMiddleware):
             )
         run.skill_loads += 1
         run.active_skill = skill
+        run.current_step = 1
         if skill.name not in run.skills_used:
             run.skills_used.append(skill.name)
         await run.emit(
@@ -314,7 +332,7 @@ def with_reason(tool: BaseTool, skill_step: bool = False) -> BaseTool:
         properties["skill_step"] = {
             "type": "integer",
             "minimum": 0,
-            "description": "The step of the open skill this call carries out; 0 if none",
+            "description": "The number of the open skill's step this call carries out",
         }
     schema["properties"] = properties
     schema["required"] = ["reason", *[r for r in schema.get("required", []) if r != "reason"]]
