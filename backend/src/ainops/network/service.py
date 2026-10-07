@@ -107,6 +107,8 @@ class NetworkService:
     commands: dict[str, dict[str, str]]
     # Which device owns an IP address (GraphStore.owner_of_ip); only trace_route needs it.
     locate: trace.Locate | None = None
+    # The OSPF neighbours a router normally has (GraphStore.ospf_peers), to spot a missing one.
+    expected_ospf: Callable[[str], list[dict[str, Any]]] | None = None
 
     # ---------- plumbing ----------
 
@@ -295,15 +297,38 @@ class NetworkService:
 
         return self._run("get_routes", device, "routes", parse, assess=assess)
 
+    def _expected_ospf(self, device: str) -> tuple[list[dict[str, Any]], str]:
+        """The neighbours the device normally has, and a note when they could not be read."""
+        if self.expected_ospf is None:
+            return [], ""
+        try:
+            name = self.inventory.get(device).name
+        except UnknownDeviceError:
+            return [], ""  # the tool itself reports the unknown device
+        try:
+            return self.expected_ospf(name), ""
+        except Exception:  # noqa: BLE001 - the graph driver raises its own errors; the check
+            # still runs without the comparison and says so
+            return [], " (expected neighbours not checked: knowledge graph not reachable)"
+
     def get_ospf_neighbors(self, device: str) -> ToolResult:
+        expected, unchecked = self._expected_ospf(device)
+
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
             rows = parsers.ospf_neighbors(d.platform, raw.text)
+            gone = health.missing_ospf(rows, expected)
+            missing = [f"{e['peer']} on {e['interface']}" for e in gone]
             if not rows:
-                return rows, "no OSPF neighbours"
-            not_full = [f"{r['neighbor_id']} ({r['state']})" for r in rows if r["state"] != "FULL"]
-            summary = f"{len(rows)} OSPF neighbour(s)"
-            summary += f"; not FULL: {', '.join(not_full)}" if not_full else ", all FULL"
-            return rows, summary
+                summary = "no OSPF neighbours"
+            else:
+                not_full = [
+                    f"{r['neighbor_id']} ({r['state']})" for r in rows if r["state"] != "FULL"
+                ]
+                summary = f"{len(rows)} OSPF neighbour(s)"
+                summary += f"; not FULL: {', '.join(not_full)}" if not_full else ", all FULL"
+            if missing:
+                summary += f"; MISSING (FULL at discovery): {', '.join(missing)}"
+            return rows, summary + unchecked
 
         def not_running(error: str) -> tuple[Any, str] | None:
             if "not running" in error.lower():
@@ -315,7 +340,7 @@ class NetworkService:
             device,
             "ospf_neighbors",
             parse,
-            assess=health.ospf_neighbors,
+            assess=lambda rows: health.ospf_neighbors(rows, expected),
             tolerate_device_error=not_running,
         )
 

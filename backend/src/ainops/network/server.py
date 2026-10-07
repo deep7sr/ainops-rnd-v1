@@ -75,15 +75,18 @@ def build_service() -> NetworkService:
         executor = LiveExecutor(settings.lab_eve_host, settings.fixtures_dir)
     else:
         executor = ReplayExecutor(settings.fixtures_dir)
+    graph = GraphStore(
+        settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
+    )
     return NetworkService(
         inventory=load_inventory(settings.lab_inventory),
         executor=executor,
         audit=AuditLog(settings.logs_dir / "network-audit.jsonl"),
         commands=load_commands(),
-        # trace_route asks the knowledge graph which device owns a next-hop address (read only).
-        locate=GraphStore(
-            settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
-        ).owner_of_ip,
+        # Read only: trace_route asks the knowledge graph which device owns a next-hop address,
+        # get_ospf_neighbors which neighbours a router normally has.
+        locate=graph.owner_of_ip,
+        expected_ospf=graph.ospf_peers,
     )
 
 
@@ -180,8 +183,9 @@ async def trace_route(
 @tool("OSPF neighbours")
 async def get_ospf_neighbors(device: DeviceName) -> ToolResult:
     """OSPF neighbours of a router and their state. FULL is healthy; a missing neighbour or a state
-    stuck in INIT/EXSTART means routes between sites are not exchanged. Use when routes to the
-    other site are missing."""
+    stuck in INIT/EXSTART means routes between sites are not exchanged. Compared with the
+    neighbours the router had at discovery: one that is MISSING is reported as a problem, with
+    the interface it should be on. Use when routes to the other site are missing."""
     return await _call(service().get_ospf_neighbors, device)
 
 

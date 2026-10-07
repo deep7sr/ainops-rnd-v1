@@ -1,0 +1,4 @@
+
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.10.5.1         1   FULL/DR         00:00:31    10.10.4.2       FastEthernet2/0
+192.168.100.1     1   FULL/DR         00:00:36    10.10.3.1       FastEthernet0/0

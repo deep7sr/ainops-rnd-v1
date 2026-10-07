@@ -266,7 +266,7 @@ def test_discover_writes_the_graph_only_when_someone_answered(
     result = asyncio.run(discovery.discover("http://x", inventory, store, None))  # type: ignore[arg-type]
     assert len(store.written) == writes
     if writes:
-        _, interfaces, _, summary = store.written[0]
+        _, interfaces, _, summary, _ = store.written[0]
         assert summary["devices_kept"] == ["IPLC-RTR-MAA"]
         assert any(i.stale_since for i in interfaces)
     assert result.graph_updated is bool(writes)

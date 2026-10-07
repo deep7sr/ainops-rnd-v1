@@ -4,6 +4,8 @@ Model (what you see in Neo4j Browser):
 
     (:Site)<-[:LOCATED_AT]-(:Device)-[:HAS_INTERFACE]->(:Interface)-[:IN_SUBNET]->(:Subnet)
     (:Device)-[:LINK {a_interface, b_interface, subnet, sources}]->(:Device)
+    (:Device)-[:OSPF_PEER {interface, address, neighbor_id}]->(:Device)
+              the OSPF neighbours a router normally has (learned at discovery, see discovery.py)
     (:Discovery {at, ...})   one node per discovery run, the newest is the current snapshot
 
 The graph is written only by the discovery job (plain code). The agent reads it through the
@@ -60,6 +62,21 @@ class LinkFact:
         return "|".join(f"{d}:{i}" for d, i in ends)
 
 
+@dataclass
+class OspfPeer:
+    """An OSPF neighbour a router normally has: seen FULL at a discovery."""
+
+    device: str
+    peer: str  # the device at the other end
+    interface: str  # on `device`
+    address: str  # the neighbour's address on that link
+    neighbor_id: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.device}|{self.peer}|{self.interface}"
+
+
 class GraphStore:
     def __init__(self, uri: str, user: str, password: str) -> None:
         # Neo4j sends a warning for every query that mentions a label not created yet (an empty
@@ -86,12 +103,14 @@ class GraphStore:
         interfaces: list[InterfaceFact],
         links: list[LinkFact],
         run: dict[str, Any],
+        ospf_peers: list[OspfPeer] | None = None,
     ) -> None:
         """Make the graph match one discovery run (devices from the inventory, the rest found)."""
         for statement in SCHEMA:
             self._write(statement)
         self._write("MATCH (n) WHERE n:Interface OR n:Subnet DETACH DELETE n")
         self._write("MATCH ()-[l:LINK]->() DELETE l")
+        self._write("MATCH ()-[p:OSPF_PEER]->() DELETE p")
         self._write(
             "UNWIND $sites AS s MERGE (site:Site {code: s.code}) SET site.name = s.name",
             sites=[{"code": c, "name": n} for c, n in inventory.sites.items()],
@@ -170,6 +189,24 @@ class GraphStore:
                 for link in links
             ],
         )
+        self._write(
+            """
+            UNWIND $peers AS x
+            MATCH (a:Device {name: x.device}), (b:Device {name: x.peer})
+            CREATE (a)-[:OSPF_PEER {interface: x.interface, address: x.address,
+                                    neighbor_id: x.neighbor_id}]->(b)
+            """,
+            peers=[
+                {
+                    "device": p.device,
+                    "peer": p.peer,
+                    "interface": p.interface,
+                    "address": p.address,
+                    "neighbor_id": p.neighbor_id,
+                }
+                for p in ospf_peers or []
+            ],
+        )
         self._write("CREATE (r:Discovery) SET r = $run", run=run)
 
     def clear(self) -> None:
@@ -240,6 +277,19 @@ class GraphStore:
         )
         return rows
 
+    def ospf_peers(self, device: str | None = None) -> list[dict[str, Any]]:
+        """The OSPF neighbours routers normally have (all, or those of one device)."""
+        return self._read(
+            """
+            MATCH (a:Device)-[p:OSPF_PEER]->(b:Device)
+            WHERE $device IS NULL OR toUpper(a.name) = toUpper($device)
+            RETURN a.name AS device, b.name AS peer, p.interface AS interface,
+                   p.address AS address, p.neighbor_id AS neighbor_id
+            ORDER BY device, interface
+            """,
+            device=device,
+        )
+
     def path(self, source: str, destination: str) -> list[dict[str, Any]]:
         """Shortest chain of links from one device to another (each hop with its interfaces)."""
         rows = self._read(
@@ -291,6 +341,7 @@ class GraphStore:
         return {
             "devices": devices,
             "links": self.links(),
+            "ospf_peers": self.ospf_peers(),
             "discovery": self.last_discovery(),
         }
 

@@ -51,19 +51,42 @@ def interface_detail(detail: dict[str, Any], name: str) -> Health:
     return _verdict(issues)
 
 
-def ospf_neighbors(rows: list[dict[str, Any]]) -> Health:
-    if not rows:
-        return _verdict([Issue(text="no OSPF neighbours")])
-    return _verdict(
-        [
-            Issue(
-                text=f"OSPF neighbour {r['neighbor_id']} is {r['state']}, not FULL",
-                interface=r.get("interface") or None,
-            )
-            for r in rows
-            if r["state"] != "FULL"
-        ]
-    )
+def missing_ospf(
+    rows: list[dict[str, Any]], expected: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Expected neighbours (seen FULL at discovery) that are not in the neighbour table at all."""
+    present = {r.get("address") for r in rows} | {r.get("neighbor_id") for r in rows}
+    return [
+        e
+        for e in expected
+        if e.get("address") not in present and e.get("neighbor_id") not in present
+    ]
+
+
+def ospf_neighbors(
+    rows: list[dict[str, Any]], expected: list[dict[str, Any]] | None = None
+) -> Health:
+    """`expected`: the neighbours this router normally has (knowledge graph). Without it only the
+    neighbours that are there can be judged, and a missing one goes unnoticed."""
+    issues = [
+        Issue(
+            text=f"OSPF neighbour {r['neighbor_id']} is {r['state']}, not FULL",
+            interface=r.get("interface") or None,
+        )
+        for r in rows
+        if r["state"] != "FULL"
+    ]
+    issues += [
+        Issue(
+            text=f"OSPF neighbour {e['peer']} ({e['address']}) on {e['interface']} is missing: "
+            "it was FULL at discovery",
+            interface=e.get("interface") or None,
+        )
+        for e in missing_ospf(rows, expected or [])
+    ]
+    if not rows and not issues:
+        issues.append(Issue(text="no OSPF neighbours"))
+    return _verdict(issues)
 
 
 def routes_to(destination: str, matches: list[dict[str, Any]]) -> Health:

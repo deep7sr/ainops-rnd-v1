@@ -10,6 +10,6 @@ laid out like `fixtures/lab` so the replay executor can read them.
 | healthy/FWL-MAA | live lab, 2026-10-06 |
 | fault1/IPLC-RTR-TRV | live lab, 2026-10-05, IPLC-RTR-MAA Fa2/0 shut (fault 1) |
 | healthy/IPLC-RTR-MAA | live lab, 2026-10-07 (the earlier rebuilt table matched it route for route) |
-| fault1/CORE-SW-TRV | **rebuilt**: the healthy table without the three routes learned over the leased line |
+| fault1/CORE-SW-TRV | live lab, 2026-10-07, fault 1 (the earlier rebuilt table matched it route for route) |
 
-Replace the rebuilt file with a live recording the next time fault 1 is applied.
+Every file is now a live recording.

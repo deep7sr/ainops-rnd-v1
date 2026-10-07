@@ -12,6 +12,11 @@ Then it compares with the previous graph (links added/removed, interfaces change
 A device that does not answer never erases what the graph knew about it: its last known interfaces
 and links are kept, marked `stale_since` (when it last answered). If no device answers at all (the
 lab is off, the network MCP server cannot reach anything), the graph is not changed.
+
+It also learns each router's normal OSPF neighbours (OSPF_PEER): every neighbour seen FULL. A
+neighbour that is missing later stays expected as long as the link to it is in the graph, so a
+discovery that runs during an outage does not make the outage look normal. The OSPF check of the
+network MCP server compares with these to report a neighbour that is missing.
 """
 
 import asyncio
@@ -26,7 +31,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from ainops.inventory import Inventory
-from ainops.topology.graph import GraphStore, InterfaceFact, LinkFact
+from ainops.topology.graph import GraphStore, InterfaceFact, LinkFact, OspfPeer
 
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -35,6 +40,7 @@ ProgressCallback = Callable[[dict[str, Any]], Awaitable[None]]
 class DeviceReport:
     interfaces: list[dict[str, Any]] = field(default_factory=list)
     neighbors: list[dict[str, Any]] = field(default_factory=list)
+    ospf: list[dict[str, Any]] | None = None  # None: not known (not asked, or the call failed)
     error: str | None = None
 
 
@@ -49,6 +55,7 @@ class DiscoveryResult:
     findings: list[str]
     added_links: list[str]
     removed_links: list[str]
+    ospf_peers: list[OspfPeer] = field(default_factory=list)
     devices_kept: list[str] = field(default_factory=list)  # did not answer: last known state kept
     graph_updated: bool = True  # False when no device answered and the graph was left as it was
 
@@ -61,6 +68,7 @@ class DiscoveryResult:
             "devices_failed": self.devices_failed,
             "interface_count": len(self.interfaces),
             "link_count": len(self.links),
+            "ospf_peer_count": len(self.ospf_peers),
             "findings": self.findings,
             "added_links": self.added_links,
             "removed_links": self.removed_links,
@@ -194,6 +202,10 @@ async def collect(
                     if not neighbors.isError and neighbors.structuredContent:
                         data = neighbors.structuredContent["data"]
                         report.neighbors = data if isinstance(data, list) else []
+                    ospf = await session.call_tool("get_ospf_neighbors", {"device": name})
+                    if not ospf.isError and ospf.structuredContent:
+                        data = ospf.structuredContent["data"]
+                        report.ospf = data if isinstance(data, list) else None
                 reports[name] = report
                 if progress:
                     await progress(
@@ -216,6 +228,45 @@ def _error_text(result: Any) -> str:
         return str(result.content[0].text)[:300]
     except (AttributeError, IndexError):
         return "no answer"
+
+
+def ospf_peers(
+    reports: dict[str, DeviceReport],
+    interfaces: list[InterfaceFact],
+    links: list[LinkFact],
+    previous: list[dict[str, Any]],
+) -> list[OspfPeer]:
+    """The OSPF neighbours each router normally has (pure: unit-tested).
+
+    Learned from the neighbours seen FULL now; a neighbour seen before stays expected while a link
+    between the two devices is still in the graph (it may be missing because of a fault).
+    """
+    owner = {str(ipaddress.ip_interface(cidr).ip): i.device for i in interfaces for cidr in i.ipv4}
+    peers: dict[str, OspfPeer] = {}
+    for name, report in reports.items():
+        for row in report.ospf or []:
+            peer = owner.get(str(row.get("address") or ""))
+            if row.get("state") == "FULL" and peer and peer != name:
+                found = OspfPeer(
+                    device=name,
+                    peer=peer,
+                    interface=str(row.get("interface") or ""),
+                    address=str(row["address"]),
+                    neighbor_id=str(row.get("neighbor_id") or ""),
+                )
+                peers[found.key] = found
+    linked = {frozenset((link.a, link.b)) for link in links}
+    for row in previous:
+        kept = OspfPeer(
+            device=row["device"],
+            peer=row["peer"],
+            interface=row["interface"],
+            address=row["address"],
+            neighbor_id=row.get("neighbor_id") or "",
+        )
+        if kept.key not in peers and frozenset((kept.device, kept.peer)) in linked:
+            peers[kept.key] = kept
+    return sorted(peers.values(), key=lambda p: p.key)
 
 
 def plan_update(
@@ -305,6 +356,7 @@ def plan_update(
         devices_failed=failed,
         interfaces=interfaces,
         links=links,
+        ospf_peers=ospf_peers(usable, interfaces, links, previous.get("ospf_peers", [])),
         findings=findings,
         added_links=sorted(current - previous_keys) if previous_keys else [],
         removed_links=sorted(k for k in previous_keys - current if answered(k)),
@@ -323,5 +375,7 @@ async def discover(
     at = datetime.now(UTC).isoformat(timespec="seconds")
     result = plan_update(inventory, reports, previous, source, at)
     if result.graph_updated:
-        store.replace_topology(inventory, result.interfaces, result.links, result.summary())
+        store.replace_topology(
+            inventory, result.interfaces, result.links, result.summary(), result.ospf_peers
+        )
     return result
