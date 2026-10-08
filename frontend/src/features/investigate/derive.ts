@@ -11,8 +11,9 @@ import { readTrace } from './trace'
 // error belong to the latest turn.
 
 export interface Step {
-  /** 'skill': the agent opened an expert skill (no tool ran). */
-  kind: 'tool' | 'refused' | 'skill'
+  /** 'skill': the agent opened an expert skill (no tool ran). 'hints': similar past cases were
+   *  looked up for this reply (no tool ran; hints, never evidence). */
+  kind: 'tool' | 'refused' | 'skill' | 'hints'
   key: string
   evidenceId: string | null
   tool: string
@@ -51,6 +52,8 @@ export interface Verdict {
   reasons: string[]
   toolCalls: number
   skillsUsed: string[]
+  /** What the AI read and wrote for this reply; null in runs recorded before it was counted. */
+  tokens: { input: number; output: number } | null
   atMs: number
 }
 
@@ -249,6 +252,36 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         })
         break
       }
+      case 'hints': {
+        const found = Array.isArray(event.cases) ? event.cases : []
+        // "None yet" is said once, for the question; later replies show only what they found.
+        if (found.length === 0 && turn > 1) break
+        steps.push({
+          kind: 'hints',
+          key: `hints-${turn}`,
+          evidenceId: null,
+          tool: 'similar_cases',
+          server: 'agent',
+          args: {},
+          why: '',
+          sentence: found.length
+            ? `Found ${found.length} similar past case${found.length === 1 ? '' : 's'}: hints, not evidence`
+            : 'Looked for similar past cases: none yet',
+          state: 'ok',
+          summary: found.length
+            ? 'From cases engineers approved. AINOPS still checks the live devices.'
+            : (event.error ?? 'AINOPS learns from the cases engineers approve.'),
+          data: found,
+          evidence: null,
+          health: null,
+          device: null,
+          durationMs: 0,
+          atMs: event.at_ms,
+          skillStep: null,
+          turn,
+        })
+        break
+      }
       case 'refused':
         steps.push({
           kind: 'refused',
@@ -278,6 +311,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           reasons: event.confidence_reasons,
           toolCalls: event.tool_calls,
           skillsUsed: strings(event.skills_used),
+          tokens: event.tokens ?? null,
           atMs: event.at_ms,
         }
         break

@@ -242,9 +242,28 @@ export interface Case {
   conversation: { message: string; outcome: string | null; root_cause: string | null }[]
   checks: number
   duration_ms: number
+  /** What the AI read and wrote, all replies together (0 for cases made before it was counted). */
+  tokens: number
+  /** Similar past cases shown to the AI as hints in this conversation (ids). */
+  hints_offered: string[]
   review: CaseReview | null
   /** The engineer's correction if there is one, else the AI's root cause. */
   root_cause: string | null
+}
+
+/** A similar past case as a hint (backend similar.py). */
+export interface HintCase {
+  case_id: string
+  question: string
+  root_cause: string
+  /** The root cause is an engineer's correction. */
+  corrected: boolean
+  fix: string | null
+  fix_worked: CaseReview['fix_worked']
+  reviewer: string
+  /** Why it matched, e.g. "same device IPLC-RTR-MAA". */
+  reasons: string[]
+  score: number
 }
 
 export interface CaseList {
@@ -355,6 +374,16 @@ export type RunEvent =
   /** A follow-up from the engineer: everything after it belongs to the next turn. */
   | { type: 'message'; turn: number; text: string; at: string }
   | { type: 'stopped'; message: string }
+  /** Similar approved past cases, shown to the AI as hints (never evidence) at a reply's start. */
+  | {
+      type: 'hints'
+      cases: HintCase[]
+      /** How many approved cases were compared. */
+      looked_at: number
+      /** Why there was no lookup (e.g. Neo4j down). */
+      error?: string | null
+      at_ms: number
+    }
   /** After a reply that found a root cause: its case was drafted or updated (or not saved). */
   | { type: 'case'; id?: string; status?: CaseStatus; error?: string }
   | { type: 'thought'; text: string; tools: string[]; at_ms: number }
@@ -409,6 +438,8 @@ export type RunEvent =
       confidence_reasons: string[]
       tool_calls: number
       skills_used?: string[]
+      /** What the AI read and wrote for this reply (missing in older runs). */
+      tokens?: { input: number; output: number }
       at_ms: number
     }
   | { type: 'error'; message: string }

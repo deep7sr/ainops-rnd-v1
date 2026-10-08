@@ -11,7 +11,7 @@ import {
 import type { Report } from '@/api'
 import { cn } from '@/lib/utils'
 import { needsEvidence, type Verdict } from './derive'
-import { formatMs } from './format'
+import { formatMs, formatTokens } from './format'
 
 const OUTCOMES: Record<Report['outcome'], { label: string; icon: LucideIcon; className: string }> =
   {
@@ -113,6 +113,9 @@ export function ReportCard({
         <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
           <Sparkles aria-hidden="true" className="size-3.5 text-provenance-ai" />
           {verdict.toolCalls} tool calls · {formatMs(verdict.atMs)}
+          {verdict.tokens && verdict.tokens.input + verdict.tokens.output > 0 && (
+            <> · {formatTokens(verdict.tokens.input + verdict.tokens.output)}</>
+          )}
         </span>
       </header>
 

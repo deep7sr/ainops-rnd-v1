@@ -413,8 +413,10 @@ def test_the_api_passes_the_conversation_to_the_reply(
 ) -> None:
     received: dict[str, Any] = {}
 
-    async def investigate(text: str, emit: Any, settings: Any, earlier: Any = None) -> None:
-        received.update(text=text, earlier=earlier)
+    async def investigate(
+        text: str, emit: Any, settings: Any, earlier: Any = None, hints: Any = None
+    ) -> None:
+        received.update(text=text, earlier=earlier, hints=hints)
 
     monkeypatch.setattr(api, "investigate", investigate)
     run = _saved_run(api.registry, _turn_one())
@@ -428,6 +430,9 @@ def test_the_api_passes_the_conversation_to_the_reply(
     assert received["text"] == "Why Fa2/0?"
     assert sorted(received["earlier"].evidence) == ["E1", "E2", "E3", "E4", "E5", "E6"]
     assert received["earlier"].next_turn == 2  # built before the new message was added
+    # Tests never reach Neo4j: the reply goes on without hints, and says why.
+    assert received["hints"].cases == []
+    assert received["hints"].error == "could not look up past cases: ConnectionError"
 
 
 def test_the_api_refuses_what_the_conversation_cannot_take(api: Any) -> None:

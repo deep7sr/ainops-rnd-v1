@@ -84,6 +84,8 @@ class Case(BaseModel):
     conversation: list[Exchange]
     checks: int
     duration_ms: int
+    tokens: int = 0  # what the LLM read and wrote, all replies together
+    hints_offered: list[str] = Field(default_factory=list)  # similar past cases shown (ids)
     review: Review | None = None
 
     @computed_field  # type: ignore[prop-decorator]
@@ -275,6 +277,20 @@ def draft_case(
         ],
         checks=len(results),
         duration_ms=sum(int(t.report.get("at_ms") or 0) for t in turns if t.report),
+        tokens=sum(
+            int((t.report.get("tokens") or {}).get(k) or 0)
+            for t in turns
+            if t.report
+            for k in ("input", "output")
+        ),
+        hints_offered=_unique(
+            [
+                str(h.get("case_id"))
+                for e in events
+                if e.get("type") == "hints"
+                for h in e.get("cases") or []
+            ]
+        ),
     )
 
 

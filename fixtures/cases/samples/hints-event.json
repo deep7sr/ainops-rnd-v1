@@ -1,0 +1,23 @@
+{
+  "type": "hints",
+  "cases": [
+    {
+      "case_id": "case-abc123",
+      "question": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+      "root_cause": "Fa2/0 on IPLC-RTR-MAA was shut during a change and not brought back",
+      "corrected": true,
+      "fix": "no shutdown on Fa2/0",
+      "fix_worked": "yes",
+      "reviewer": "Praveen",
+      "reasons": [
+        "same subnets 192.168.100.0/24, 192.168.200.0/24",
+        "same site MAA, TRV",
+        "a very similar question"
+      ],
+      "score": 10.0
+    }
+  ],
+  "looked_at": 1,
+  "error": null,
+  "at_ms": 3
+}

@@ -16,15 +16,25 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel, Field
 
-from ainops.agent.conversation import earlier_of
+from ainops.agent.conversation import Earlier, earlier_of
 from ainops.agent.runner import investigate
 from ainops.agent.skills import load_skills
 from ainops.api.runs import Refused, Run, RunRegistry
 from ainops.case_store import CaseBook, Neo4jCases
-from ainops.cases import BY_HAND, Case, CaseError, ReviewRequest, draft_case, follow, review_case
+from ainops.cases import (
+    BY_HAND,
+    Case,
+    CaseError,
+    ReviewRequest,
+    case_id,
+    draft_case,
+    follow,
+    review_case,
+)
 from ainops.config import get_settings
 from ainops.inventory import load_inventory
 from ainops.network.audit import AuditLog
+from ainops.similar import Hints, clues_of, similar_cases
 from ainops.topology.discovery import discover
 from ainops.topology.graph import GraphStore
 
@@ -194,7 +204,8 @@ async def start_investigation(body: Question) -> dict[str, str]:
     question = body.question.strip()
 
     async def work(run: Run) -> None:
-        await investigate(question, run.emit, settings)
+        hints = await asyncio.to_thread(_look_up_hints, run, question, None)
+        await investigate(question, run.emit, settings, hints=hints)
         await _record_case(run)
 
     run = registry.start("investigation", question, work)
@@ -250,7 +261,8 @@ async def send_message(run_id: str, body: Message) -> dict[str, Any]:
     earlier = earlier_of(run.events, run.title, run.started_at)
 
     async def work(current: Run) -> None:
-        await investigate(text, current.emit, settings, earlier)
+        hints = await asyncio.to_thread(_look_up_hints, current, text, earlier)
+        await investigate(text, current.emit, settings, earlier, hints)
         await _record_case(current)
 
     try:
@@ -302,6 +314,28 @@ async def _record_case(run: Run) -> None:
         return
     if case is not None:
         await run.emit({"type": "case", "id": case.id, "status": case.status})
+
+
+def _look_up_hints(run: Run, message: str, earlier: Earlier | None) -> Hints:
+    """Similar approved cases for this reply (similar.py). Never fails the reply: when the graph
+    cannot be read, the reply goes on without hints and the page says why."""
+    try:
+        sites = {str(d["name"]): str(d.get("site") or "") for d in store().devices()}
+        approved = cases().all("approved")
+    except Exception as error:  # noqa: BLE001 - shown in the hints step
+        return Hints(error=f"could not look up past cases: {type(error).__name__}")
+    texts = [*(t.message for t in earlier.turns), message] if earlier else [message]
+    checks = [(r.device, r.tool, r.summary) for r in earlier.evidence.values()] if earlier else []
+    offered = {
+        str(hint.get("case_id"))
+        for event in run.events
+        if event.get("type") == "hints"
+        for hint in event.get("cases") or []
+    }
+    # Never this conversation's own case, nor one already offered earlier in it.
+    exclude = offered | {case_id(run.id)}
+    found = similar_cases(approved, clues_of(texts, checks, sites), sites, exclude)
+    return Hints(cases=found, looked_at=len(approved))
 
 
 def _case_or_404(case_id: str) -> Case:

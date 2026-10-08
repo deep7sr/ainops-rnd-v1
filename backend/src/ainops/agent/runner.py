@@ -36,6 +36,7 @@ from ainops.agent.prompts import SYSTEM_PROMPT
 from ainops.agent.report import EvidenceRecord, Report, verify
 from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills, step_tools
 from ainops.config import Settings
+from ainops.similar import Hints, hints_prompt
 
 Event = dict[str, Any]
 Emit = Callable[[Event], Awaitable[None]]
@@ -76,6 +77,8 @@ class Investigation:
     skill_loads: int = 0
     current_step: int = 1  # the skill step the agent is on (for steps it does not tag)
     next_evidence: int = 1  # continues across the turns of a conversation (see conversation.py)
+    tokens_in: int = 0  # what the LLM read and wrote for this reply (all its steps)
+    tokens_out: int = 0
 
     def __post_init__(self) -> None:
         self.known_ips.update(_IPV4.findall(self.question))
@@ -138,6 +141,9 @@ class AinopsMiddleware(AgentMiddleware):
         message = state["messages"][-1]
         if not isinstance(message, AIMessage):
             return None
+        if message.usage_metadata:  # what this step cost, as the LLM reports it
+            self.run.tokens_in += message.usage_metadata["input_tokens"]
+            self.run.tokens_out += message.usage_metadata["output_tokens"]
         thought = _text(message.content).strip()
         reasoning = message.additional_kwargs.get("reasoning_content") or ""
         calls = [c["name"] for c in message.tool_calls if c["name"] != "Report"]
@@ -403,9 +409,18 @@ def mcp_client(settings: Settings) -> MultiServerMCPClient:
 
 
 async def investigate(
-    question: str, emit: Emit, settings: Settings, earlier: Earlier | None = None
+    question: str,
+    emit: Emit,
+    settings: Settings,
+    earlier: Earlier | None = None,
+    hints: Hints | None = None,
 ) -> dict[str, Any]:
-    """Answer one message: the question, or with `earlier`, a follow-up in a conversation."""
+    """Answer one message: the question, or with `earlier`, a follow-up in a conversation.
+
+    `hints`: similar approved past cases (similar.py). They go into the prompt as hints only: no
+    evidence id, so they cannot be cited or raise the confidence, and their addresses are not
+    added to the ones the checks may use.
+    """
     client = mcp_client(settings)
     topology_tools = await client.get_tools(server_name="topology")
     network_tools = await client.get_tools(server_name="network")
@@ -436,6 +451,17 @@ async def investigate(
             "at_ms": 0,
         }
     )
+    if hints is not None:
+        await emit(
+            {
+                "type": "hints",
+                "cases": [h.as_event() for h in hints.cases],
+                "looked_at": hints.looked_at,
+                "error": hints.error,
+                "at_ms": run.elapsed_ms(),
+            }
+        )
+        prompt += hints_prompt(hints.cases)
 
     agent = create_agent(
         build_model(settings),
@@ -464,6 +490,7 @@ async def investigate(
         "evidence": {k: vars(v) for k, v in run.evidence.items()},
         "tool_calls": run.tool_calls,
         "skills_used": run.skills_used,
+        "tokens": {"input": run.tokens_in, "output": run.tokens_out},
         "at_ms": run.elapsed_ms(),
     }
     await emit(final)

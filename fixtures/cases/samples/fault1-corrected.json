@@ -46,6 +46,8 @@
   ],
   "checks": 6,
   "duration_ms": 82297,
+  "tokens": 0,
+  "hints_offered": [],
   "review": {
     "action": "correct",
     "reviewer": "Praveen",

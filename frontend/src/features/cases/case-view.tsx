@@ -2,7 +2,7 @@ import { ArrowRight, CircleCheck, CircleX, Clock, Sparkles, UserRound, Wrench } 
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Case, CaseStatus } from '@/api'
-import { formatMs } from '@/features/investigate/format'
+import { formatMs, formatTokens } from '@/features/investigate/format'
 import { cn } from '@/lib/utils'
 
 // One case: what AINOPS concluded and the proof, the engineer's review, and how the conversation
@@ -164,7 +164,23 @@ export function CaseView({ item }: { item: Case }) {
         {draft.skills.length > 0 && <Section title="Skill used">{draft.skills.join(', ')}</Section>}
         <Section title="Investigation cost">
           {item.checks} check{item.checks === 1 ? '' : 's'} · {formatMs(item.duration_ms)}
+          {item.tokens > 0 && ` · ${formatTokens(item.tokens)}`}
         </Section>
+        {item.hints_offered.length > 0 && (
+          <Section title="Past cases offered as hints">
+            <p className="flex flex-wrap gap-2">
+              {item.hints_offered.map((id) => (
+                <Link
+                  key={id}
+                  to={`/cases/${id}`}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  {id}
+                </Link>
+              ))}
+            </p>
+          </Section>
+        )}
       </div>
 
       {draft.suggested_fix.length > 0 && (

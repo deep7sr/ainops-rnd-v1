@@ -46,6 +46,8 @@
   ],
   "checks": 6,
   "duration_ms": 82297,
+  "tokens": 0,
+  "hints_offered": [],
   "review": null,
   "root_cause": "The leased‑line interface on the MAA router (IPLC‑RTR‑MAA Fa2/0) is administratively shut, breaking the path between the sites."
 }

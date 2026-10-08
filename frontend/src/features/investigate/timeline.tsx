@@ -3,6 +3,7 @@ import {
   ChevronDown,
   CircleCheck,
   CircleX,
+  Lightbulb,
   Loader2,
   Network,
   Router,
@@ -12,6 +13,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { Fragment, useState } from 'react'
+import { Link } from 'react-router'
+import type { HintCase } from '@/api'
 import { JsonView } from '@/components/json-view'
 import { ReviewBadge } from '@/features/skills/skills-page'
 import { StepText } from '@/features/skills/step-text'
@@ -71,6 +74,62 @@ function SkillItem({ step, last }: { step: Step; last: boolean }) {
             ))}
           </ol>
         </div>
+      </div>
+    </li>
+  )
+}
+
+const WORKED = { yes: ' (it worked)', no: ' (it did not work)', unknown: '' } as const
+
+/** Similar past cases shown to the AI as hints. Dashed: a hint, never evidence. */
+function HintsItem({ step, last }: { step: Step; last: boolean }) {
+  const cases = Array.isArray(step.data) ? (step.data as HintCase[]) : []
+  return (
+    <li className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-dashed border-muted-foreground/60 bg-background text-muted-foreground">
+          <Lightbulb aria-hidden="true" className="size-4" />
+        </span>
+        {!last && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
+      </div>
+      <div className="mb-3 min-w-0 flex-1 px-3 py-2.5">
+        <p className="text-sm font-medium">{step.sentence}</p>
+        <p className="text-xs text-muted-foreground">{step.summary}</p>
+        {cases.length > 0 && (
+          <ul aria-label="Similar past cases" className="mt-2 space-y-2">
+            {cases.map((hint) => (
+              <li
+                key={hint.case_id}
+                className="rounded-md border border-dashed bg-background/60 px-3 py-2 text-sm"
+              >
+                <p className="text-xs text-muted-foreground">
+                  <Link
+                    to={`/cases/${hint.case_id}`}
+                    className="font-mono text-primary underline-offset-4 hover:underline"
+                  >
+                    {hint.case_id}
+                  </Link>{' '}
+                  · approved by {hint.reviewer || 'an engineer'} · “{hint.question}”
+                </p>
+                <p className="mt-1">
+                  <span className="font-medium">
+                    {hint.corrected ? 'Root cause (engineer): ' : 'Root cause: '}
+                  </span>
+                  {hint.root_cause}
+                </p>
+                {hint.fix && (
+                  <p className="text-xs text-muted-foreground">
+                    Fix: {hint.fix}
+                    {hint.fix_worked ? WORKED[hint.fix_worked] : ''}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Similar because: {hint.reasons.join('; ')}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </li>
   )
@@ -279,6 +338,8 @@ export function Timeline({
           )}
           {step.kind === 'skill' ? (
             <SkillItem step={step} last={index === steps.length - 1} />
+          ) : step.kind === 'hints' ? (
+            <HintsItem step={step} last={index === steps.length - 1} />
           ) : (
             <StepItem
               step={step}
