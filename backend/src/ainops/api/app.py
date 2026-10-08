@@ -43,6 +43,7 @@ from ainops.inventory_edit import (
 from ainops.inventory_view import device_detail, inventory_rows
 from ainops.network.audit import AuditLog
 from ainops.similar import Hints, clues_of, similar_cases
+from ainops.skill_usage import SkillUsage, skill_usage
 from ainops.topology.discovery import discover
 from ainops.topology.graph import GraphStore
 
@@ -159,7 +160,8 @@ async def call_tool(server: str, tool: str, call: ToolCall) -> dict[str, Any]:
 
 @app.get("/api/skills")
 async def skills() -> dict[str, Any]:
-    """The skills the agent can use, and the ones left out with their problems.
+    """The skills the agent can use (with how often investigations used them), and the ones
+    left out with their problems.
 
     Tool names are checked against the running MCP servers; if one is down they cannot be checked
     (tools_checked is false) and only the format is.
@@ -172,8 +174,22 @@ async def skills() -> dict[str, Any]:
             known = None
             break
     library = load_skills(settings.skills_dir, known)
+    usage = skill_usage(
+        {
+            "id": run.id,
+            "title": run.title,
+            "started_at": run.started_at,
+            "events": run.events,
+            "outcome": run.summary()["outcome"],
+        }
+        for run in registry.runs.values()
+        if run.kind == "investigation"
+    )
     return {
-        "skills": [s.model_dump() for s in library.skills.values()],
+        "skills": [
+            {**s.model_dump(), "usage": usage.get(s.name, SkillUsage()).model_dump()}
+            for s in library.skills.values()
+        ],
         "problems": [p.model_dump() for p in library.problems],
         "tools_checked": library.tools_checked,
     }

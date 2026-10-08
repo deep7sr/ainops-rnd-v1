@@ -460,10 +460,32 @@ export interface Skill {
   path: string
 }
 
+/** An investigation that opened a skill (backend skill_usage.py). */
+export interface SkillRun {
+  id: string
+  title: string
+  started_at: string
+  /** How its latest reply ended; null while it runs. */
+  outcome: string | null
+}
+
+export interface SkillUsage {
+  /** Investigations that opened the skill. */
+  count: number
+  last_at: string | null
+  /** The latest few, newest first. */
+  recent: SkillRun[]
+}
+
+export interface SkillProblem {
+  folder: string
+  problems: string[]
+}
+
 export interface SkillCatalog {
-  skills: Skill[]
+  skills: (Skill & { usage: SkillUsage })[]
   /** Skills left out, with what to fix. */
-  problems: { folder: string; problems: string[] }[]
+  problems: SkillProblem[]
   /** False when the MCP servers were down: tool names could not be checked. */
   tools_checked: boolean
 }

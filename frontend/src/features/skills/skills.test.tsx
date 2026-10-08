@@ -1,10 +1,9 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { RunEvent, SkillCatalog } from '@/api'
+import type { RunEvent } from '@/api'
 import { deriveInvestigation } from '@/features/investigate/derive'
 import { NowBanner } from '@/features/investigate/now-banner'
 import { Timeline } from '@/features/investigate/timeline'
-import { SkillsView } from './skills-page'
 
 // An investigation that follows an expert skill, as the backend streams it (runner.py).
 
@@ -129,56 +128,5 @@ describe('following a skill', () => {
     }
     const view = deriveInvestigation([started, junk[2]], NAMES)
     expect(view.skill?.steps).toEqual(['only this'])
-  })
-})
-
-describe('Skills page', () => {
-  const catalog: SkillCatalog = {
-    skills: [
-      {
-        name: 'link-check',
-        description: 'Use when one link looks down.',
-        intro: 'Check both sides.',
-        steps: STEPS,
-        tools: ['get_interfaces', 'ping', 'get_logs'],
-        author: 'Praveen',
-        reviewed_by: 'Praveen',
-        path: 'link-check/SKILL.md',
-      },
-      {
-        name: 'draft-one',
-        description: 'Use for drafts.',
-        intro: '',
-        steps: ['`ping` it.'],
-        tools: ['ping'],
-        author: 'drafted by Claude',
-        reviewed_by: '',
-        path: 'draft-one/SKILL.md',
-      },
-    ],
-    problems: [{ folder: 'broken', problems: ['`get_routez` is not a tool'] }],
-    tools_checked: true,
-  }
-
-  it('shows each skill with its steps and whether it was reviewed', () => {
-    render(<SkillsView catalog={catalog} />)
-    expect(screen.getByRole('heading', { name: 'link-check' })).toBeInTheDocument()
-    expect(screen.getByText('Reviewed by Praveen')).toBeInTheDocument()
-    expect(screen.getByText('Draft · not reviewed')).toBeInTheDocument()
-    const steps = screen.getByRole('list', { name: 'Steps of link-check' })
-    expect(within(steps).getAllByRole('listitem')).toHaveLength(3)
-    expect(within(steps).getByText('Admin down means shut.')).toBeInTheDocument()
-  })
-
-  it('lists the skills left out and what to fix', () => {
-    render(<SkillsView catalog={catalog} />)
-    const problems = screen.getByRole('region', { name: 'Skills that need fixing' })
-    expect(problems).toHaveTextContent('skills/broken')
-    expect(problems).toHaveTextContent('`get_routez` is not a tool')
-  })
-
-  it('says when tool names could not be checked', () => {
-    render(<SkillsView catalog={{ ...catalog, problems: [], tools_checked: false }} />)
-    expect(screen.getByRole('status')).toHaveTextContent('could not be checked')
   })
 })

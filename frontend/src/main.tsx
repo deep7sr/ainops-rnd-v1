@@ -27,6 +27,7 @@ const router = createBrowserRouter([
       { path: '/investigations/:id', element: <InvestigatePage /> },
       { path: '/graph', element: <TopologyPage /> },
       { path: '/skills', element: <SkillsPage /> },
+      { path: '/skills/:name', element: <SkillsPage /> },
       { path: '/tools', element: <ToolsPage /> },
       { path: '/inventory', element: <InventoryPage /> },
       { path: '/inventory/:name', element: <InventoryPage /> },
