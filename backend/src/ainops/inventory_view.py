@@ -72,6 +72,10 @@ def inventory_rows(
                 "description": device.description,
                 "connection": _connection(device),
                 "credential_ref": device.credential_ref,
+                # Added on the Inventory page (removable there); None: in the hand-written file.
+                "added": {"by": device.added_by, "at": device.added_at}
+                if device.added_by
+                else None,
                 "status": device_status(device.name, found, discovery),
                 "interfaces": {
                     "total": len(interfaces),

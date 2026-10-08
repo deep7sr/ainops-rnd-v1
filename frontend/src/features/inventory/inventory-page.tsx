@@ -6,6 +6,7 @@ import { api, type DeviceState, type InventoryRow } from '@/api'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { AddDeviceDialog } from './add-device-dialog'
 import { DeviceSheet } from './device-sheet'
 import { platformName } from './labels'
 import { DeviceStatusBadge } from './status-badge'
@@ -48,6 +49,11 @@ function Row({ row }: { row: InventoryRow }) {
         </Link>
         {row.aliases.length > 0 && (
           <span className="ml-2 text-xs text-muted-foreground">{row.aliases.join(', ')}</span>
+        )}
+        {row.added && (
+          <span className="ml-2 rounded border px-1 py-px text-[10px] text-muted-foreground">
+            added here
+          </span>
         )}
         {row.description && (
           <span className="block text-xs text-muted-foreground">{row.description}</span>
@@ -130,6 +136,7 @@ export function InventoryPage() {
             .
           </p>
         </div>
+        <AddDeviceDialog />
       </div>
 
       {list.data?.graph_error && (

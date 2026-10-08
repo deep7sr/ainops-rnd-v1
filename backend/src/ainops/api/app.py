@@ -32,7 +32,14 @@ from ainops.cases import (
     review_case,
 )
 from ainops.config import get_settings
-from ainops.inventory import UnknownDeviceError, load_inventory
+from ainops.inventory import PLATFORMS, UnknownDeviceError, load_inventory
+from ainops.inventory_edit import (
+    InventoryError,
+    NewDevice,
+    add_device,
+    credential_profiles,
+    remove_device,
+)
 from ainops.inventory_view import device_detail, inventory_rows
 from ainops.network.audit import AuditLog
 from ainops.similar import Hints, clues_of, similar_cases
@@ -442,6 +449,68 @@ async def inventory_list() -> dict[str, Any]:
         "discovery": (snapshot or {}).get("discovery"),
         "graph_error": problem,
     }
+
+
+@app.get("/api/inventory/options")
+async def inventory_options() -> dict[str, Any]:
+    """What the "Add device" form can offer: sites, roles in use, platforms, login profiles
+    (names only: the secrets stay in .env)."""
+    inventory = load_inventory(settings.lab_inventory)
+    return {
+        "sites": inventory.sites,
+        "roles": sorted({d.role for d in inventory.devices}),
+        "platforms": list(PLATFORMS),
+        "credential_profiles": credential_profiles(),
+    }
+
+
+def _audit(**entry: Any) -> None:
+    AuditLog(settings.logs_dir / "network-audit.jsonl").write(
+        command=None, source="inventory", duration_ms=0, **entry
+    )
+
+
+@app.post("/api/inventory")
+async def inventory_add(body: NewDevice) -> dict[str, Any]:
+    """Add a device. AINOPS can then log in to it (read-only) with the chosen login profile."""
+    try:
+        device = add_device(settings.lab_inventory, body, credential_profiles())
+    except InventoryError as error:
+        raise HTTPException(409, str(error)) from None
+    _audit(
+        tool="add_device",
+        device=device.name,
+        args={"site": device.site, "role": device.role, "platform": device.platform,
+              "port": device.port, "credential_ref": device.credential_ref},
+        outcome="ok",
+        summary=f"added to the inventory by {device.added_by}",
+    )  # fmt: skip
+    inventory = load_inventory(settings.lab_inventory)
+    return next(r for r in inventory_rows(inventory, None, None) if r["name"] == device.name)
+
+
+class Removal(BaseModel):
+    removed_by: str = Field(max_length=80)
+
+
+@app.post("/api/inventory/{name}/remove")
+async def inventory_remove(name: str, body: Removal) -> dict[str, str]:
+    """Remove a device added on this page. It leaves the knowledge graph at the next discovery."""
+    try:
+        device = remove_device(settings.lab_inventory, name, body.removed_by)
+    except UnknownDeviceError as error:
+        raise HTTPException(404, str(error)) from None
+    except InventoryError as error:
+        raise HTTPException(409, str(error)) from None
+    by = " ".join(body.removed_by.split())
+    _audit(
+        tool="remove_device",
+        device=device.name,
+        args={},
+        outcome="ok",
+        summary=f"removed from the inventory by {by}",
+    )
+    return {"removed": device.name}
 
 
 @app.get("/api/inventory/{name}")

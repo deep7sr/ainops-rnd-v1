@@ -44,6 +44,14 @@ export const api = {
     }),
   investigations: () => request<RunSummary[]>('/api/investigations'),
   inventory: () => request<InventoryList>('/api/inventory'),
+  inventoryOptions: () => request<InventoryOptions>('/api/inventory/options'),
+  addDevice: (device: NewDevice) =>
+    request<InventoryRow>('/api/inventory', { method: 'POST', body: JSON.stringify(device) }),
+  removeDevice: (name: string, removedBy: string) =>
+    request<{ removed: string }>(`/api/inventory/${encodeURIComponent(name)}/remove`, {
+      method: 'POST',
+      body: JSON.stringify({ removed_by: removedBy }),
+    }),
   inventoryDevice: (name: string) =>
     request<InventoryDetail>(`/api/inventory/${encodeURIComponent(name)}`),
   /** A follow-up in the conversation of an investigation: AINOPS replies in a new turn. */
@@ -223,10 +231,35 @@ export interface InventoryRow {
   connection: string
   /** Name of the login profile in .env; never the secret itself. Null: no login needed. */
   credential_ref: string | null
+  /** Added on the Inventory page (and removable there); null: in the hand-written file. */
+  added: { by: string; at: string } | null
   status: DeviceStatus
   interfaces: { total: number; addressed: number; addressed_down: number }
   /** Null when the cases could not be read. */
   cases: { total: number; pending: number } | null
+}
+
+/** What the "Add device" form can offer (backend /api/inventory/options). */
+export interface InventoryOptions {
+  sites: Record<string, string>
+  roles: string[]
+  platforms: string[]
+  /** Login profiles configured in .env: names only, never the secrets. */
+  credential_profiles: string[]
+}
+
+/** A device to add (backend inventory_edit.NewDevice). */
+export interface NewDevice {
+  name: string
+  site: string
+  site_name?: string
+  role: string
+  platform: string
+  port: number
+  aliases: string[]
+  description: string
+  credential_ref: string | null
+  added_by: string
 }
 
 export interface InventoryList {

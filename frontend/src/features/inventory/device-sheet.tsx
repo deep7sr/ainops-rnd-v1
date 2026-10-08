@@ -1,9 +1,10 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { CircleCheck, CircleX, Loader2, RefreshCw } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CircleCheck, CircleX, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { api } from '@/api'
+import { api, type InventoryRow } from '@/api'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Sheet,
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/sheet'
 import { CaseStatusBadge } from '@/features/cases/case-view'
 import { cn } from '@/lib/utils'
+import { rememberName, savedName } from '@/lib/your-name'
 import { platformName, statusSentence } from './labels'
 import { DeviceStatusBadge } from './status-badge'
 
@@ -73,6 +75,63 @@ function CheckNow({ device }: { device: string }) {
   )
 }
 
+/** Remove a device that was added on this page (the hand-written ones stay in their file). */
+function Remove({ row, onRemoved }: { row: InventoryRow; onRemoved: () => void }) {
+  const [asking, setAsking] = useState(false)
+  const [name, setName] = useState(savedName)
+  const queryClient = useQueryClient()
+  const remove = useMutation({
+    mutationFn: () => api.removeDevice(row.name, name.trim()),
+    onSuccess: () => {
+      rememberName(name.trim())
+      void queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      onRemoved()
+    },
+  })
+  if (!asking) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setAsking(true)}>
+        <Trash2 aria-hidden="true" /> Remove from AINOPS
+      </Button>
+    )
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-status-critical-border p-3">
+      <p className="text-sm">
+        Remove <span className="font-medium">{row.name}</span>? AINOPS stops logging in to it, and
+        it leaves the network map at the next discovery. Its cases and past investigations stay.
+      </p>
+      <label htmlFor="removed-by" className="text-xs font-semibold">
+        Your name
+      </label>
+      <Input
+        id="removed-by"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={80}
+      />
+      <div className="flex gap-2">
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={!name.trim() || remove.isPending}
+          onClick={() => remove.mutate()}
+        >
+          Remove
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setAsking(false)}>
+          Cancel
+        </Button>
+      </div>
+      {remove.isError && (
+        <p role="alert" className="text-sm text-status-critical">
+          Not removed: {remove.error.message}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function DeviceSheet({ name, onClose }: { name: string | null; onClose: () => void }) {
   const detail = useQuery({
     queryKey: ['inventory', name],
@@ -105,6 +164,14 @@ export function DeviceSheet({ name, onClose }: { name: string | null; onClose: (
               <Section title="Status">
                 <DeviceStatusBadge status={row.status} />
                 <p className="text-sm">{statusSentence(row.status)}</p>
+                {row.status.state === 'not_discovered' && (
+                  <p className="text-sm">
+                    <Link to="/graph" className="text-primary underline-offset-4 hover:underline">
+                      Run discovery on the Network map
+                    </Link>{' '}
+                    to learn its interfaces and links.
+                  </p>
+                )}
                 <CheckNow device={row.name} />
               </Section>
 
@@ -130,6 +197,22 @@ export function DeviceSheet({ name, onClose }: { name: string | null; onClose: (
                 <p className="text-xs text-muted-foreground">
                   Passwords stay in the server's .env file; AINOPS never shows them.
                 </p>
+              </Section>
+
+              <Section title="Where it comes from">
+                {row.added ? (
+                  <>
+                    <p className="text-sm">
+                      Added on this page by {row.added.by} ·{' '}
+                      {new Date(row.added.at).toLocaleString()}
+                    </p>
+                    <Remove row={row} onRemoved={onClose} />
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    The hand-written inventory file (lab/inventory.yaml): changed there, not here.
+                  </p>
+                )}
               </Section>
 
               <Section title="Interfaces (last discovery)">

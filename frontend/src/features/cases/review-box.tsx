@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { rememberName, savedName } from '@/lib/your-name'
 import { missing } from './review-rules'
 
 // "Was this diagnosis right?" The engineer approves the case, corrects it, or rejects it. The same
 // box sits under the report on the Investigate page and on the Cases page. The server checks
 // every rule again (backend cases.py); this box only helps fill it in.
 
-const NAME_KEY = 'ainops.reviewer'
 type Action = CaseReview['action']
 type Worked = NonNullable<CaseReview['fix_worked']>
 
@@ -27,22 +27,6 @@ const WORKED: { value: Worked; label: string }[] = [
   { value: 'no', label: 'No' },
   { value: 'unknown', label: 'Not known yet' },
 ]
-
-function savedName(): string {
-  try {
-    return window.localStorage.getItem(NAME_KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function rememberName(name: string) {
-  try {
-    window.localStorage.setItem(NAME_KEY, name)
-  } catch {
-    // private window or blocked storage: the name is simply asked again next time
-  }
-}
 
 const fieldLabel = 'text-xs font-semibold text-foreground'
 

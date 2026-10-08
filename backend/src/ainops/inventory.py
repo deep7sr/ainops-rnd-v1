@@ -1,8 +1,17 @@
-"""The device inventory (lab/inventory.yaml): which devices exist and how to reach them."""
+"""The device inventory: which devices exist and how to reach them.
+
+Two files, read together:
+- lab/inventory.yaml: written and reviewed by people (comments explain each field);
+- lab/inventory.local.yaml: devices engineers added on the Inventory page (inventory_edit.py
+  writes it; never edited by hand, not in git).
+
+A name or alias may appear only once across both. No secret is ever in either file: a device
+names a login profile (credential_ref) whose username and password are in .env.
+"""
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -24,6 +33,8 @@ class Device:
     description: str = ""
     aliases: tuple[str, ...] = ()
     credential_ref: str | None = None
+    added_by: str | None = None  # set for devices added on the Inventory page
+    added_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,22 +52,48 @@ class Inventory:
         raise UnknownDeviceError(f"'{name}' is not in the inventory. Known devices: {names}")
 
 
+def local_path(path: Path) -> Path:
+    """The file of devices added on the Inventory page, next to the hand-written one."""
+    return path.with_name(path.stem + ".local" + path.suffix)
+
+
+def _device(entry: dict[str, Any]) -> Device:
+    if entry["platform"] not in PLATFORMS:
+        raise ValueError(f"{entry['name']}: unknown platform {entry['platform']!r}")
+    return Device(
+        name=entry["name"],
+        site=entry["site"],
+        role=entry["role"],
+        platform=entry["platform"],
+        port=int(entry["port"]),
+        description=entry.get("description", ""),
+        aliases=tuple(entry.get("aliases", [])),
+        credential_ref=entry.get("credential_ref"),
+        added_by=entry.get("added_by"),
+        added_at=entry.get("added_at"),
+    )
+
+
+def _read(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
 def load_inventory(path: Path) -> Inventory:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    """Both inventory files together. Raises ValueError when a name or alias is used twice."""
+    base, local = _read(path), _read(local_path(path))
+    sites = {**dict(base.get("sites") or {}), **dict(local.get("sites") or {})}
     devices = []
-    for entry in raw["devices"]:
-        if entry["platform"] not in PLATFORMS:
-            raise ValueError(f"{entry['name']}: unknown platform {entry['platform']!r}")
-        devices.append(
-            Device(
-                name=entry["name"],
-                site=entry["site"],
-                role=entry["role"],
-                platform=entry["platform"],
-                port=int(entry["port"]),
-                description=entry.get("description", ""),
-                aliases=tuple(entry.get("aliases", [])),
-                credential_ref=entry.get("credential_ref"),
-            )
-        )
-    return Inventory(sites=dict(raw.get("sites", {})), devices=devices)
+    for entry in (base.get("devices") or []) + (local.get("devices") or []):
+        try:
+            devices.append(_device(entry))
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"a device entry is not valid ({entry!r}): {error}") from None
+    seen: dict[str, str] = {}
+    for device in devices:
+        for name in (device.name, *device.aliases):
+            if name.upper() in seen:
+                raise ValueError(f"'{name}' is used twice in the inventory ({seen[name.upper()]})")
+            seen[name.upper()] = device.name
+    return Inventory(sites=sites, devices=devices)

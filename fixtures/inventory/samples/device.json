@@ -11,6 +11,7 @@
     "description": "MAA end of the TRV-MAA leased line (IPLC)",
     "connection": "EVE-NG console, port 32776",
     "credential_ref": null,
+    "added": null,
     "status": {
       "state": "reached",
       "at": "2026-10-07T09:50:00+00:00",

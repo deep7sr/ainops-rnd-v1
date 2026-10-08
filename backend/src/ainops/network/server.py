@@ -20,7 +20,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ainops.config import get_settings
-from ainops.inventory import load_inventory
+from ainops.inventory import load_inventory, local_path
 from ainops.network.audit import AuditLog
 from ainops.network.executor import LiveExecutor
 from ainops.network.service import (
@@ -88,10 +88,28 @@ def build_service() -> NetworkService:
     )
 
 
+_inventory_seen: tuple[int | None, ...] | None = None
+
+
+def _inventory_stamp() -> tuple[int | None, ...]:
+    files = (settings.lab_inventory, local_path(settings.lab_inventory))
+    return tuple(f.stat().st_mtime_ns if f.is_file() else None for f in files)
+
+
 def service() -> NetworkService:
-    global _service
+    """The service; its inventory is read again when a device was added or removed (the
+    Inventory page writes inventory.local.yaml), so no restart is needed."""
+    global _service, _inventory_seen
+    stamp = _inventory_stamp()
     if _service is None:
         _service = build_service()
+        _inventory_seen = stamp
+    elif stamp != _inventory_seen:
+        try:
+            _service.inventory = load_inventory(settings.lab_inventory)
+            _inventory_seen = stamp
+        except ValueError:
+            pass  # a broken file: keep the devices AINOPS had, try again on the next call
     return _service
 
 

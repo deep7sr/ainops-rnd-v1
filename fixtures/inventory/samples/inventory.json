@@ -10,6 +10,7 @@
       "description": "TRV Internet edge router",
       "connection": "EVE-NG console, port 32770",
       "credential_ref": null,
+      "added": null,
       "status": {
         "state": "reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -36,6 +37,7 @@
       "description": "TRV firewall (vSRX)",
       "connection": "EVE-NG console, port 32771",
       "credential_ref": "lab-srx-admin",
+      "added": null,
       "status": {
         "state": "reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -62,6 +64,7 @@
       "description": "TRV core router, gateway of the TRV LAN 192.168.100.0/24",
       "connection": "EVE-NG console, port 32769",
       "credential_ref": null,
+      "added": null,
       "status": {
         "state": "reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -90,6 +93,7 @@
       "description": "TRV end of the TRV-MAA leased line (IPLC)",
       "connection": "EVE-NG console, port 32775",
       "credential_ref": null,
+      "added": null,
       "status": {
         "state": "reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -118,6 +122,7 @@
       "description": "MAA end of the TRV-MAA leased line (IPLC)",
       "connection": "EVE-NG console, port 32776",
       "credential_ref": null,
+      "added": null,
       "status": {
         "state": "reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -144,6 +149,7 @@
       "description": "MAA core router, gateway of the MAA LAN 192.168.200.0/24",
       "connection": "EVE-NG console, port 32774",
       "credential_ref": null,
+      "added": null,
       "status": {
         "state": "reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -170,6 +176,7 @@
       "description": "MAA firewall (vSRX)",
       "connection": "EVE-NG console, port 32773",
       "credential_ref": "lab-srx-admin",
+      "added": null,
       "status": {
         "state": "not_reached",
         "at": "2026-10-07T09:50:00+00:00",
@@ -196,6 +203,7 @@
       "description": "MAA Internet edge router",
       "connection": "EVE-NG console, port 32772",
       "credential_ref": null,
+      "added": null,
       "status": {
         "state": "not_discovered",
         "at": null,
