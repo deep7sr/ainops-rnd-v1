@@ -1,0 +1,32 @@
+{
+    "zones-information" : [
+    {
+        "zones-security" : [
+        {
+            "zones-security-zonename" : [
+            {
+                "data" : "trust"
+            }
+            ],
+            "zones-security-interfaces" : [
+            {
+            }
+            ]
+        },
+        {
+            "zones-security-zonename" : [
+            {
+                "data" : "untrust"
+            }
+            ],
+            "zones-security-interfaces" : [
+            {
+            }
+            ]
+        }
+        ]
+    }
+    ]
+}
+
+root@FWL-MAA>

@@ -419,13 +419,41 @@ class NetworkService:
 
         return self._run("get_firewall_policies", device, "firewall_policies", parse)
 
+    def _firewall_interfaces(self, device: str) -> tuple[list[dict[str, Any]] | None, str]:
+        """The firewall's interfaces, to find addressed ones in no zone (None: not checked)."""
+        try:
+            platform = self.inventory.get(device).platform
+        except UnknownDeviceError:
+            return None, ""  # the tool itself reports the unknown device
+        if "firewall_zones" not in self.commands.get(platform, {}):
+            return None, ""  # the tool itself reports that zones are not supported here
+        try:
+            result = self.get_interfaces(device)
+        except ToolFailure as error:
+            return None, f" (interfaces not checked: {error})"
+        if not isinstance(result.data, list):
+            return None, " (interfaces not checked: their output could not be parsed)"
+        return result.data, ""
+
     def get_firewall_zones(self, device: str) -> ToolResult:
+        interfaces, unchecked = self._firewall_interfaces(device)
+
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
             rows = parsers.firewall_zones(raw.text)
             text = "; ".join(f"{r['zone']}: {', '.join(r['interfaces']) or '-'}" for r in rows)
-            return rows, text or "no security zones"
+            outside = health.outside_zones(rows, interfaces or [])
+            if outside:
+                listed = ", ".join(f"{r['name']} ({', '.join(r['ipv4'])})" for r in outside)
+                text = (text + "; " if text else "") + f"NOT IN ANY ZONE: {listed}"
+            return rows, (text or "no security zones") + unchecked
 
-        return self._run("get_firewall_zones", device, "firewall_zones", parse)
+        return self._run(
+            "get_firewall_zones",
+            device,
+            "firewall_zones",
+            parse,
+            assess=lambda rows: health.firewall_zones(rows, interfaces),
+        )
 
     def trace_route(self, source: str, destination: str) -> TraceResult:
         args = {"source": source, "destination": destination}

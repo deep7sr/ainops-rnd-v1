@@ -259,7 +259,9 @@ async def get_firewall_policies(device: DeviceName) -> ToolResult:
 @tool("Firewall zones")
 async def get_firewall_zones(device: DeviceName) -> ToolResult:
     """Security zones of a Juniper firewall and the interfaces in each. Use with
-    get_firewall_policies to know which zone pair applies to a flow."""
+    get_firewall_policies to know which zone pair applies to a flow. Also reads the firewall's
+    interfaces and reports any with an address that is in no zone: the firewall drops its
+    traffic."""
     return await _call(service().get_firewall_zones, device)
 
 

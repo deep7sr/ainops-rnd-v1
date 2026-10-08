@@ -6,6 +6,7 @@ The UI colours the device on the live map with it, and the agent reads it with t
 - "info":    the tool only reports facts and does not judge them (ARP table, logs, policies).
 """
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -87,6 +88,45 @@ def ospf_neighbors(
     if not rows and not issues:
         issues.append(Issue(text="no OSPF neighbours"))
     return _verdict(issues)
+
+
+# Junos SRX ports that carry traffic through the firewall. Not fxp0/em0 (management, never in a
+# zone) or lo0 (the router's own loopback).
+_ZONE_PORTS = re.compile(r"^(ge-|xe-|et-|ae\d|reth\d|irb|vlan|st0)")
+
+
+def outside_zones(
+    zones: list[dict[str, Any]], interfaces: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Traffic ports with an address but no unit in any security zone (an SRX drops their traffic).
+
+    `interfaces` are physical ports (ge-0/0/1); zones list units (ge-0/0/1.0). A port counts as
+    in a zone when any of its units is in one."""
+    in_zone = {name for zone in zones for name in zone["interfaces"]}
+    return [
+        row
+        for row in interfaces
+        if row["ipv4"]
+        and _ZONE_PORTS.match(row["name"])
+        and not any(z == row["name"] or z.startswith(row["name"] + ".") for z in in_zone)
+    ]
+
+
+def firewall_zones(zones: list[dict[str, Any]], interfaces: list[dict[str, Any]] | None) -> Health:
+    """`interfaces`: the firewall's own interfaces, read just before. Without them the zones are
+    only reported, not judged."""
+    if interfaces is None:
+        return INFO
+    return _verdict(
+        [
+            Issue(
+                text=f"{row['name']} has an address ({', '.join(row['ipv4'])}) but is in no "
+                "security zone: the firewall drops its traffic",
+                interface=row["name"],
+            )
+            for row in outside_zones(zones, interfaces)
+        ]
+    )
 
 
 def routes_to(destination: str, matches: list[dict[str, Any]]) -> Health:
