@@ -22,6 +22,8 @@ const catalog: SkillCatalog = {
       path: 'link-check/SKILL.md',
       updated_by: '',
       updated_at: '',
+      status: 'live',
+      reviewed_at: '2026-10-06T10:00:00Z',
       version: 'v1',
       usage: {
         count: 7,
@@ -53,6 +55,8 @@ const catalog: SkillCatalog = {
       path: 'ospf-neighbour-down/SKILL.md',
       updated_by: '',
       updated_at: '',
+      status: 'draft',
+      reviewed_at: '',
       version: 'v2',
       usage: NEVER,
     },
@@ -90,7 +94,7 @@ describe('Skills page', () => {
   it('each row says the status, the number of steps and how often it was used', () => {
     show()
     const rows = within(screen.getByRole('list', { name: 'Skills' })).getAllByRole('listitem')
-    expect(rows[0]).toHaveTextContent('Reviewed')
+    expect(rows[0]).toHaveTextContent('Live')
     expect(rows[0]).toHaveTextContent(/2 steps · used 7× · last/)
     expect(rows[1]).toHaveTextContent('Draft')
     expect(rows[1]).toHaveTextContent('1 step · not used yet')
@@ -101,7 +105,10 @@ describe('Skills page', () => {
   it('opens the skill in the link with its sentence, steps, tools and file', () => {
     show('link-check')
     const article = screen.getByRole('article')
-    expect(within(article).getByText('Reviewed by Praveen')).toBeInTheDocument()
+    expect(within(article).getByText('Live')).toBeInTheDocument()
+    expect(within(article).getByRole('region', { name: 'Status' })).toHaveTextContent(
+      /AINOPS uses this skill for every question it fits\.Reviewed by Praveen on/,
+    )
     expect(within(article).getByRole('region', { name: 'When AINOPS uses it' })).toHaveTextContent(
       'Use when one link looks down.',
     )
@@ -133,7 +140,7 @@ describe('Skills page', () => {
     expect(screen.getByRole('region', { name: 'Used in investigations' })).toHaveTextContent(
       'Not used yet.',
     )
-    expect(screen.getByText('Draft · not reviewed')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Status' })).toHaveTextContent('Not reviewed yet.')
   })
 
   it('a broken skill shows what to fix and where', () => {
@@ -167,7 +174,8 @@ describe('Skills page', () => {
   it('the filters show their counts', () => {
     show()
     expect(screen.getByRole('button', { name: /All/ })).toHaveTextContent('All3')
-    expect(screen.getByRole('button', { name: /Reviewed/ })).toHaveTextContent('Reviewed1')
+    expect(screen.getByRole('button', { name: /Live/ })).toHaveTextContent('Live1')
+    expect(screen.getByRole('button', { name: /Off/ })).toHaveTextContent('Off0')
     expect(screen.getByRole('button', { name: /Drafts/ })).toHaveTextContent('Drafts1')
     expect(screen.getByRole('button', { name: /Need fixing/ })).toHaveTextContent('Need fixing1')
   })

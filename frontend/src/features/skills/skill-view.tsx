@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import type { Skill, SkillProblem, SkillUsage } from '@/api'
 import { cn } from '@/lib/utils'
 import { outcomeLabel, shortDate, skillTitle } from './labels'
-import { NeedsFixingBadge, ReviewBadge } from './skill-badges'
+import { NeedsFixingBadge, SkillStatusBadge } from './skill-badges'
 import { StepText } from './step-text'
 
 // One skill, opened: when AINOPS uses it, its steps, the tools it needs and where it was used.
@@ -72,12 +72,15 @@ export function SkillView({
   skill,
   usage,
   actions,
+  panel,
 }: {
   skill: Skill
   /** Missing in the editor's preview. */
   usage?: SkillUsage
-  /** Buttons for the skill (edit, review...), shown under the title. */
+  /** Buttons for the skill (edit, history), shown under the title. */
   actions?: ReactNode
+  /** Whether AINOPS uses it, and the buttons to change that (the Skills page only). */
+  panel?: ReactNode
 }) {
   return (
     <article aria-labelledby="skill-title" className="space-y-6">
@@ -86,7 +89,7 @@ export function SkillView({
           <h2 id="skill-title" className="text-lg font-semibold">
             {skillTitle(skill.name)}
           </h2>
-          <ReviewBadge reviewedBy={skill.reviewed_by} />
+          <SkillStatusBadge status={skill.status} />
         </div>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span className="font-mono">{skill.name}</span>
@@ -94,6 +97,8 @@ export function SkillView({
         </p>
         {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
       </header>
+
+      {panel}
 
       <section aria-label="When AINOPS uses it" className="space-y-2">
         <Label>When AINOPS uses it</Label>

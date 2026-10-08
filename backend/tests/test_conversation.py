@@ -414,7 +414,12 @@ def test_the_api_passes_the_conversation_to_the_reply(
     received: dict[str, Any] = {}
 
     async def investigate(
-        text: str, emit: Any, settings: Any, earlier: Any = None, hints: Any = None
+        text: str,
+        emit: Any,
+        settings: Any,
+        earlier: Any = None,
+        hints: Any = None,
+        trying: Any = None,
     ) -> None:
         received.update(text=text, earlier=earlier, hints=hints)
 

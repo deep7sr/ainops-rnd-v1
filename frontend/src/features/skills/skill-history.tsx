@@ -31,7 +31,7 @@ function OldVersion({
   name: string
   entry: SkillHistoryEntry
   onBack: () => void
-  actions?: (entry: SkillHistoryEntry) => ReactNode
+  actions?: (entry: SkillHistoryEntry, done: () => void) => ReactNode
 }) {
   const old = useQuery({
     queryKey: ['skill-version', name, entry.id],
@@ -46,7 +46,7 @@ function OldVersion({
         Replaced {when(entry.replaced_at)}
         {entry.saved_by && <> · saved by {entry.saved_by}</>}
       </p>
-      {actions?.(entry)}
+      {actions?.(entry, onBack)}
       {old.isPending ? (
         <Skeleton className="h-64 w-full" />
       ) : old.isError ? (
@@ -71,8 +71,8 @@ export function SkillHistory({
   actions,
 }: {
   name: string
-  /** Buttons for an old version (restore). */
-  actions?: (entry: SkillHistoryEntry) => ReactNode
+  /** Buttons for an old version (restore); `done` goes back to the list of versions. */
+  actions?: (entry: SkillHistoryEntry, done: () => void) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [opened, setOpened] = useState<SkillHistoryEntry | null>(null)

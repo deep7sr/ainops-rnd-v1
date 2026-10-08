@@ -2,25 +2,27 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, BookOpenCheck, Pencil, Plus, Search, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { api, type SkillCatalog } from '@/api'
+import { api, type SkillCatalog, type SkillStatus } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { shortDate, skillTitle } from './labels'
-import { NeedsFixingBadge } from './skill-badges'
+import { NeedsFixingBadge, SkillStatusBadge } from './skill-badges'
 import { SkillHistory } from './skill-history'
+import { RestoreVersion, SkillStatusPanel } from './skill-status'
 import { BrokenSkillView, SkillView } from './skill-view'
 
 // The expert skills: a list on the left, the opened skill on the right (each skill has its own
 // link, /skills/<name>). On narrow screens the list and the opened skill take turns.
 
-type Filter = 'all' | 'reviewed' | 'draft' | 'broken'
+type Filter = 'all' | SkillStatus | 'broken'
 
 const FILTERS: { filter: Filter; label: string }[] = [
   { filter: 'all', label: 'All' },
-  { filter: 'reviewed', label: 'Reviewed' },
+  { filter: 'live', label: 'Live' },
   { filter: 'draft', label: 'Drafts' },
+  { filter: 'off', label: 'Off' },
   { filter: 'broken', label: 'Need fixing' },
 ]
 
@@ -35,9 +37,7 @@ function entryName(entry: Entry) {
 function inFilter(entry: Entry, filter: Filter) {
   if (filter === 'all') return true
   if (entry.kind === 'broken') return filter === 'broken'
-  if (filter === 'reviewed') return Boolean(entry.skill.reviewed_by)
-  if (filter === 'draft') return !entry.skill.reviewed_by
-  return false
+  return entry.skill.status === filter
 }
 
 function matches(entry: Entry, text: string) {
@@ -78,14 +78,7 @@ function Row({
           {entry.kind === 'broken' ? (
             <NeedsFixingBadge />
           ) : (
-            <span
-              className={cn(
-                'mt-0.5 shrink-0 text-[11px] font-medium',
-                entry.skill.reviewed_by ? 'text-status-healthy' : 'text-status-warning',
-              )}
-            >
-              {entry.skill.reviewed_by ? 'Reviewed' : 'Draft'}
-            </span>
+            <SkillStatusBadge status={entry.skill.status} />
           )}
         </span>
         {entry.kind === 'skill' ? (
@@ -223,6 +216,7 @@ export function SkillsView({
                 <SkillView
                   skill={opened.skill}
                   usage={opened.skill.usage}
+                  panel={<SkillStatusPanel skill={opened.skill} version={opened.skill.version} />}
                   actions={
                     <>
                       <Button asChild size="sm">
@@ -230,7 +224,17 @@ export function SkillsView({
                           <Pencil aria-hidden="true" /> Edit
                         </Link>
                       </Button>
-                      <SkillHistory name={opened.skill.name} />
+                      <SkillHistory
+                        name={opened.skill.name}
+                        actions={(entry, done) => (
+                          <RestoreVersion
+                            name={opened.skill.name}
+                            entry={entry.id}
+                            version={opened.skill.version}
+                            onRestored={done}
+                          />
+                        )}
+                      />
                     </>
                   }
                 />
@@ -249,7 +253,7 @@ export function SkillsPage() {
   const { name } = useParams()
   const catalog = useQuery({ queryKey: ['skills'], queryFn: api.skills })
   const skills = catalog.data?.skills ?? []
-  const reviewed = skills.filter((s) => s.reviewed_by).length
+  const live = skills.filter((s) => s.status === 'live').length
   const broken = catalog.data?.problems.length ?? 0
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-6 py-6">
@@ -265,13 +269,14 @@ export function SkillsPage() {
           </Button>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Checklists the network engineers wrote for common problems. AINOPS opens the one that fits
-          a question and follows its steps; the Investigate page shows which step it is on.
+          Checklists the network engineers wrote for common problems. AINOPS opens the live skill
+          that fits a question and follows its steps; the Investigate page shows which step it is
+          on. A new or changed skill is a draft until it is reviewed and made live.
         </p>
         {catalog.data && (
           <p className="text-xs text-muted-foreground tabular-nums">
-            {skills.length} {skills.length === 1 ? 'skill' : 'skills'} · {reviewed} reviewed ·{' '}
-            {broken} {broken === 1 ? 'needs' : 'need'} fixing
+            {skills.length} {skills.length === 1 ? 'skill' : 'skills'} · {live} live · {broken}{' '}
+            {broken === 1 ? 'needs' : 'need'} fixing
           </p>
         )}
       </div>

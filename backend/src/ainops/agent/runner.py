@@ -305,6 +305,7 @@ class AinopsMiddleware(AgentMiddleware):
                 "steps": skill.steps,
                 "author": skill.author,
                 "reviewed_by": skill.reviewed_by,
+                "status": skill.status,
                 "why": reason,
                 "at_ms": run.elapsed_ms(),
             }  # fmt: skip
@@ -414,19 +415,23 @@ async def investigate(
     settings: Settings,
     earlier: Earlier | None = None,
     hints: Hints | None = None,
+    trying: str | None = None,
 ) -> dict[str, Any]:
     """Answer one message: the question, or with `earlier`, a follow-up in a conversation.
 
     `hints`: similar approved past cases (similar.py). They go into the prompt as hints only: no
     evidence id, so they cannot be cited or raise the confidence, and their addresses are not
     added to the ones the checks may use.
+    `trying`: a skill the engineer started this conversation to try ("Try this skill"); it is
+    offered even when it is not live yet.
     """
     client = mcp_client(settings)
     topology_tools = await client.get_tools(server_name="topology")
     network_tools = await client.get_tools(server_name="network")
     servers = {t.name: "topology" for t in topology_tools}
     servers.update({t.name: "network" for t in network_tools})
-    library = load_skills(settings.skills_dir, servers)
+    # Only live skills, and the one this investigation was started to try.
+    library = load_skills(settings.skills_dir, servers).for_agent(trying)
     has_skills = bool(library.skills)
     tools = [with_reason(t, skill_step=has_skills) for t in [*topology_tools, *network_tools]]
     if has_skills:
@@ -448,6 +453,7 @@ async def investigate(
             "turn": earlier.next_turn if earlier else 1,
             "tools": sorted(servers),
             "skills": sorted(library.skills),
+            "trying": library.trying,
             "at_ms": 0,
         }
     )

@@ -37,10 +37,11 @@ export const api = {
       body: JSON.stringify({ arguments: args }),
     }),
   startDiscovery: () => request<{ id: string }>('/api/discovery', { method: 'POST' }),
-  startInvestigation: (question: string) =>
+  /** `trySkill`: start it to try a skill that is not live yet ("Try this skill"). */
+  startInvestigation: (question: string, trySkill?: string | null) =>
     request<{ id: string }>('/api/investigations', {
       method: 'POST',
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(trySkill ? { question, try_skill: trySkill } : { question }),
     }),
   investigations: () => request<RunSummary[]>('/api/investigations'),
   inventory: () => request<InventoryList>('/api/inventory'),
@@ -81,6 +82,21 @@ export const api = {
     request<SavedSkill>(`/api/skills/${encodeURIComponent(name)}`, {
       method: 'PUT',
       body: JSON.stringify(save),
+    }),
+  reviewSkill: (name: string, reviewer: string, version: string) =>
+    request<SavedSkill>(`/api/skills/${encodeURIComponent(name)}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ reviewer, version }),
+    }),
+  setSkillStatus: (name: string, status: SkillStatus, by: string, version: string) =>
+    request<SavedSkill>(`/api/skills/${encodeURIComponent(name)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status, by, version }),
+    }),
+  restoreSkill: (name: string, entry: string, by: string, version: string) =>
+    request<SavedSkill>(`/api/skills/${encodeURIComponent(name)}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ entry, by, version }),
     }),
   skillHistory: (name: string) =>
     request<SkillHistoryEntry[]>(`/api/skills/${encodeURIComponent(name)}/history`),
@@ -475,7 +491,12 @@ export interface Skill {
   /** Who saved it last on the Skills page, and when (empty: written by hand). */
   updated_by: string
   updated_at: string
+  /** Only live skills are offered to the agent; a draft can be tried on purpose. */
+  status: SkillStatus
+  reviewed_at: string
 }
+
+export type SkillStatus = 'draft' | 'live' | 'off'
 
 /** What the skill form holds (backend skill_book.py). */
 export interface SkillForm {
@@ -554,6 +575,8 @@ export type RunEvent =
       question: string
       tools: string[]
       skills?: string[]
+      /** The skill this conversation was started to try, if any. */
+      trying?: string | null
       /** Which message of the conversation this reply answers (missing before conversations). */
       turn?: number
       at_ms: number
@@ -592,6 +615,8 @@ export type RunEvent =
       steps: string[]
       author: string
       reviewed_by: string
+      /** Missing in runs from before skills had a status. */
+      status?: SkillStatus
       why?: string
       at_ms: number
     }

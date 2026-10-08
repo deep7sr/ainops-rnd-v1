@@ -6,7 +6,7 @@ Events, serves the knowledge graph for the map, and shows the MCP tool definitio
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -277,6 +277,76 @@ async def skill_edit(name: str, request: SkillSave) -> dict[str, Any]:
     return _saved(request, skill, version, new)
 
 
+class SkillReview(BaseModel):
+    reviewer: str = Field(min_length=1, max_length=80)
+    version: str = Field(max_length=64)
+
+
+class SkillStatusChange(BaseModel):
+    status: str = Field(max_length=10)
+    by: str = Field(min_length=1, max_length=80)
+    version: str = Field(max_length=64)
+
+
+class SkillRestore(BaseModel):
+    entry: str = Field(max_length=40)
+    by: str = Field(min_length=1, max_length=80)
+    version: str = Field(max_length=64)
+
+
+async def _skill_change(
+    tool: str, name: str, summary: str, work: Callable[[], tuple[Skill, str]]
+) -> dict[str, Any]:
+    try:
+        skill, version = work()
+    except SkillConflict as error:
+        raise HTTPException(409, str(error)) from None
+    except SkillError as error:
+        raise HTTPException(422, str(error)) from None
+    _skill_audit(tool, name, summary)
+    return {**skill.model_dump(), "version": version}
+
+
+@app.post("/api/skills/{name}/review")
+async def skill_review(name: str, body: SkillReview) -> dict[str, Any]:
+    """An engineer checked the procedure; a reviewed skill can go live."""
+    by = " ".join(body.reviewer.split())
+    return await _skill_change(
+        "review_skill",
+        name,
+        f"skill {name} reviewed by {by}",
+        lambda: skill_book.review(settings.skills_dir, name, body.reviewer, body.version),
+    )
+
+
+@app.post("/api/skills/{name}/status")
+async def skill_status(name: str, body: SkillStatusChange) -> dict[str, Any]:
+    """Live: AINOPS uses the skill. Draft or off: it does not (a draft can still be tried)."""
+    by = " ".join(body.by.split())
+    return await _skill_change(
+        "skill_status",
+        name,
+        f"skill {name} set to {body.status} by {by}",
+        lambda: skill_book.set_status(settings.skills_dir, name, body.status, body.version),
+    )
+
+
+@app.post("/api/skills/{name}/restore")
+async def skill_restore(name: str, body: SkillRestore) -> dict[str, Any]:
+    """Bring back an earlier version, saved like an edit (a draft that needs a new review)."""
+    known = await _known_tools()
+    by = " ".join(body.by.split())
+    return await _skill_change(
+        "restore_skill",
+        name,
+        f"skill {name} restored to the version replaced {body.entry} by {by}; "
+        "it needs a new review",
+        lambda: skill_book.restore(
+            settings.skills_dir, name, body.entry, body.by, body.version, known
+        ),
+    )
+
+
 @app.get("/api/skills/{name}/history")
 async def skill_history(name: str) -> list[dict[str, Any]]:
     try:
@@ -322,15 +392,27 @@ async def start_discovery() -> dict[str, str]:
 
 class Question(BaseModel):
     question: str = Field(min_length=3, max_length=500)
+    # "Try this skill": offer this skill even if it is not live yet (the whole conversation).
+    try_skill: str | None = Field(default=None, max_length=64)
+
+
+def _tried_skill(events: list[dict[str, Any]]) -> str | None:
+    """The skill a conversation was started to try (its first reply says so)."""
+    first = next((e for e in events if e.get("type") == "started"), None)
+    tried = first.get("trying") if first else None
+    return tried if isinstance(tried, str) else None
 
 
 @app.post("/api/investigations")
 async def start_investigation(body: Question) -> dict[str, str]:
     question = body.question.strip()
+    trying = body.try_skill.strip().lower() if body.try_skill else None
+    if trying and load_skills(settings.skills_dir, None).get(trying) is None:
+        raise HTTPException(422, f"there is no usable skill named '{trying}' to try")
 
     async def work(run: Run) -> None:
         hints = await asyncio.to_thread(_look_up_hints, run, question, None)
-        await investigate(question, run.emit, settings, hints=hints)
+        await investigate(question, run.emit, settings, hints=hints, trying=trying)
         await _record_case(run)
 
     run = registry.start("investigation", question, work)
@@ -384,10 +466,11 @@ async def send_message(run_id: str, body: Message) -> dict[str, Any]:
         raise HTTPException(404, "unknown run")
     # What the conversation holds before this message (the reply is built on it).
     earlier = earlier_of(run.events, run.title, run.started_at)
+    trying = _tried_skill(run.events)
 
     async def work(current: Run) -> None:
         hints = await asyncio.to_thread(_look_up_hints, current, text, earlier)
-        await investigate(text, current.emit, settings, earlier, hints)
+        await investigate(text, current.emit, settings, earlier, hints, trying)
         await _record_case(current)
 
     try:

@@ -37,6 +37,8 @@ const EXISTING: SkillCatalog = {
       path: 'link-check/SKILL.md',
       updated_by: '',
       updated_at: '',
+      status: 'live',
+      reviewed_at: '2026-10-08T10:00:00Z',
       usage: { count: 0, last_at: null, recent: [] },
       version: 'v1',
     },
@@ -248,7 +250,7 @@ describe('editing a skill', () => {
     expect(name).toHaveValue('link-check')
     expect(name).toBeDisabled()
     expect(screen.getByLabelText('Step 2')).toHaveValue('`get_interfaces` on both.')
-    expect(screen.getByText(/needs a new review/)).toBeInTheDocument()
+    expect(screen.getByText(/makes the skill a draft again/)).toBeInTheDocument()
     await user.type(screen.getByLabelText('Your name'), 'Deependra')
     await user.type(screen.getByLabelText('About (optional)'), 'Both ends.')
     const save = screen.getByRole('button', { name: 'Save changes' })

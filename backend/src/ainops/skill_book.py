@@ -9,7 +9,9 @@ page writes the same file a person would. Rules:
   down;
 - an edit is refused when the file changed since the engineer opened it (`version`): one save
   wins, nobody overwrites another's work without seeing it;
-- every edit sets the skill back to not reviewed: a changed procedure needs a new review;
+- every edit (and every restore of an earlier version) sets the skill back to a draft that is not
+  reviewed: a changed procedure needs a new review before AINOPS uses it again;
+- only a reviewed skill can go live (and only live skills are offered to the agent);
 - the version an edit replaces is kept in skills/<name>/history/ (not in git; git keeps the
   committed history), and every file is written whole or not at all.
 A skill only names read-only tools; it cannot run anything.
@@ -20,6 +22,7 @@ import os
 import re
 import tempfile
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -224,17 +227,13 @@ def save(
         if request.version is None and folder.exists():
             raise SkillConflict(f"there is already a skill named '{name}'")
         if request.version is not None:
-            if current is None:
-                raise SkillConflict(f"there is no skill named '{name}' any more")
-            if version_of(current) != request.version:
-                raise SkillConflict(
-                    f"'{name}' was changed by someone else after you opened it: reload it, then "
-                    "make your change again"
-                )
+            _same_version(name, current, request.version)
         earlier = _metadata(current) if current is not None else {}
         metadata = {
             "author": earlier.get("author") or by,
-            "reviewed_by": "",  # a changed procedure needs a new review
+            "reviewed_by": "",  # a changed procedure needs a new review...
+            "reviewed_at": "",
+            "status": "draft",  # ...and is not used by AINOPS until it is live again
             "updated_by": by,
             "updated_at": now.isoformat(timespec="seconds"),
         }
@@ -245,6 +244,88 @@ def save(
             _write_atomically(folder / HISTORY / f"{_stamp(now)}.md", current)
         _write_atomically(file, text)
     return skill, version_of(text), current is None
+
+
+def _same_version(name: str, current: str | None, version: str) -> str:
+    """The current text, if it is still the version the engineer opened."""
+    if current is None:
+        raise SkillConflict(f"there is no skill named '{name}' any more")
+    if version_of(current) != version:
+        raise SkillConflict(
+            f"'{name}' was changed by someone else after you opened it: reload it, then make "
+            "your change again"
+        )
+    return current
+
+
+def _set_metadata(
+    base: Path, name: str, version: str, change: Callable[[Skill, dict[str, str]], dict[str, str]]
+) -> tuple[Skill, str]:
+    """Change only the metadata block (review, status): the procedure itself stays as it is, so
+    no earlier version is kept for it."""
+    file = _folder(base, name) / "SKILL.md"
+    with _LOCK:
+        current = _same_version(
+            name, file.read_text(encoding="utf-8") if file.is_file() else None, version
+        )
+        skill, problems = parse_skill(name, current, None)  # its tools were checked when saved
+        if skill is None:
+            raise SkillError("the skill needs fixing in its file first: " + "; ".join(problems))
+        metadata = change(skill, _metadata(current))
+        form = SkillForm(
+            name=skill.name, description=skill.description, intro=skill.intro, steps=skill.steps
+        )
+        changed, problems, text = check(form, None, metadata)
+        if changed is None or problems:
+            raise SkillError("; ".join(problems) or "the skill could not be read back")
+        _write_atomically(file, text)
+    return changed, version_of(text)
+
+
+def review(
+    base: Path, name: str, reviewer: str, version: str, now: datetime | None = None
+) -> tuple[Skill, str]:
+    """An engineer has checked the procedure. It stays in its status (a draft can then go live)."""
+    by = _one_line(reviewer)
+    if not by:
+        raise SkillError("say who reviewed it: type your name")
+    at = (now or datetime.now(UTC)).isoformat(timespec="seconds")
+    return _set_metadata(
+        base, name, version, lambda _, meta: {**meta, "reviewed_by": by, "reviewed_at": at}
+    )
+
+
+def set_status(base: Path, name: str, status: str, version: str) -> tuple[Skill, str]:
+    """Live: AINOPS uses it. Draft or off: it does not (a draft can still be tried). Any other
+    value is refused when the file is read back (the loader's rule)."""
+
+    def change(skill: Skill, meta: dict[str, str]) -> dict[str, str]:
+        if status == "live" and not skill.reviewed_by.strip():
+            raise SkillError(f"'{name}' has not been reviewed: review it before it goes live")
+        return {**meta, "status": status}
+
+    return _set_metadata(base, name, version, change)
+
+
+def restore(
+    base: Path,
+    name: str,
+    entry: str,
+    by: str,
+    version: str,
+    known_tools: set[str] | None,
+    now: datetime | None = None,
+) -> tuple[Skill, str]:
+    """Bring back an earlier version: saved like an edit (the current one is kept, and the skill
+    needs a new review before it is live again)."""
+    old, problems = parse_skill(name, old_version(base, name, entry), known_tools)
+    if old is None:
+        raise SkillError("this version cannot be used any more: " + "; ".join(problems))
+    form = SkillForm(name=name, description=old.description, intro=old.intro, steps=old.steps)
+    skill, new_version, _ = save(
+        base, SkillSave(skill=form, by=by, version=version), known_tools, now
+    )
+    return skill, new_version
 
 
 def history(base: Path, name: str) -> list[HistoryEntry]:

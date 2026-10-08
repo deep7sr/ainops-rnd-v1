@@ -10,14 +10,17 @@ import {
   ShieldCheck,
   Sparkles,
   Square,
+  FlaskConical,
+  X,
 } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { CaseSection } from '@/features/cases/case-section'
+import { skillTitle } from '@/features/skills/labels'
 import { NetworkMap } from '@/features/topology/network-map'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
@@ -41,8 +44,11 @@ function QuestionBox({ compact }: { compact: boolean }) {
   const [question, setQuestion] = useState('')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  // "Try this skill" on the Skills page opens /?try=<name>: the next question tries that skill.
+  const [params, setParams] = useSearchParams()
+  const trying = params.get('try')?.trim() || null
   const start = useMutation({
-    mutationFn: (text: string) => api.startInvestigation(text),
+    mutationFn: (text: string) => api.startInvestigation(text, trying),
     onSuccess: ({ id }) => {
       setQuestion('')
       void queryClient.invalidateQueries({ queryKey: ['investigations'] })
@@ -55,6 +61,29 @@ function QuestionBox({ compact }: { compact: boolean }) {
 
   return (
     <div className="space-y-3">
+      {trying && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-2 text-sm"
+        >
+          <FlaskConical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-warning" />
+          <p className="min-w-0 flex-1">
+            Trying the skill <span className="font-medium">{skillTitle(trying)}</span>: AINOPS
+            follows it for this question even if it is not live yet. Ask a question it should fit.
+          </p>
+          <button
+            type="button"
+            aria-label="Stop trying this skill"
+            onClick={() => {
+              params.delete('try')
+              setParams(params, { replace: true })
+            }}
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
+        </div>
+      )}
       <form
         onSubmit={(event) => {
           event.preventDefault()

@@ -16,7 +16,7 @@ import { Fragment, useState } from 'react'
 import { Link } from 'react-router'
 import type { HintCase } from '@/api'
 import { JsonView } from '@/components/json-view'
-import { ReviewBadge } from '@/features/skills/skill-badges'
+import { SkillBadge } from '@/features/skills/skill-badges'
 import { StepText } from '@/features/skills/step-text'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -58,7 +58,10 @@ function SkillItem({ step, last }: { step: Step; last: boolean }) {
         )}
         <div className="mt-2 rounded-md border bg-background/60 px-3 py-2 text-sm">
           <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <ReviewBadge reviewedBy={String(step.args.reviewed_by ?? '')} />
+            <SkillBadge
+              status={String(step.args.status ?? '')}
+              reviewedBy={String(step.args.reviewed_by ?? '')}
+            />
             {step.summary}
           </p>
           <ol aria-label={`Steps of the skill`} className="mt-1.5 space-y-1">

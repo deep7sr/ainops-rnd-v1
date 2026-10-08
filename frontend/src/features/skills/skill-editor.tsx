@@ -188,6 +188,8 @@ function previewOf(form: SkillForm, checked: Skill | null): Skill {
     path: `${form.name.trim().toLowerCase() || 'new-skill'}/SKILL.md`,
     updated_by: '',
     updated_at: '',
+    status: 'draft',
+    reviewed_at: '',
   }
 }
 
@@ -221,8 +223,7 @@ export function SkillEditor({
   const canSave =
     !pristine &&
     upToDate &&
-    checked.data?.skill != null &&
-    problems.length === 0 &&
+    checked.data?.skill != null && // null whenever there is a problem
     by.trim().length > 0
 
   const save = useMutation({
@@ -370,7 +371,8 @@ export function SkillEditor({
           />
           <p className={hint}>
             Kept with the skill and in the Audit log.
-            {editing && ' Saving a change marks the skill not reviewed: it needs a new review.'}
+            {editing &&
+              ' Saving a change makes the skill a draft again: AINOPS stops using it until it is reviewed and made live.'}
           </p>
         </div>
 
@@ -467,8 +469,8 @@ export function SkillEditorPage() {
           {name ? `Edit “${skillTitle(name)}”` : 'New skill'}
         </h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Write the checklist the way you would explain it to a new engineer. AINOPS can use it from
-          its next reply once it is saved.
+          Write the checklist the way you would explain it to a new engineer. It is saved as a
+          draft: try it on a question, have it reviewed, then make it live for AINOPS to use.
         </p>
       </div>
       {!name ? (

@@ -236,7 +236,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           evidenceId: null,
           tool: 'use_skill',
           server: 'agent',
-          args: { skill: name, reviewed_by: skill.reviewedBy },
+          args: { skill: name, reviewed_by: skill.reviewedBy, status: text(event.status) },
           why: text(event.why),
           sentence: `Using the expert skill "${name}"`,
           state: 'ok',

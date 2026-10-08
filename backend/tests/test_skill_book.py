@@ -81,6 +81,8 @@ def test_a_new_skill_records_who_wrote_it_and_is_not_reviewed(tmp_path: Path) ->
     assert meta(tmp_path, "link-check")["metadata"] == {
         "author": "Praveen K",
         "reviewed_by": "",
+        "reviewed_at": "",
+        "status": "draft",
         "updated_by": "Praveen K",
         "updated_at": "2026-10-09T09:00:00+00:00",
     }
@@ -181,6 +183,8 @@ def test_an_edit_keeps_the_author_needs_a_new_review_and_keeps_the_old_file(
     assert meta(tmp_path, "link-check")["metadata"] == {
         "author": "Praveen",
         "reviewed_by": "",  # changed: needs a new review
+        "reviewed_at": "",
+        "status": "draft",  # and is not used until it is live again
         "updated_by": "Deependra",
         "updated_at": "2026-10-09T10:30:00+00:00",
     }

@@ -7,7 +7,8 @@ One folder per skill, in the Agent Skills format (skills/<name>/SKILL.md):
     description: Use when users at one site cannot reach a host at the other site.
     metadata:
       author: Praveen
-      reviewed_by: Praveen                  # empty = draft, not reviewed yet
+      reviewed_by: Praveen                  # empty = not reviewed yet
+      status: live                          # draft (default), live or off
     ---
     Optional intro text.
 
@@ -19,12 +20,17 @@ One folder per skill, in the Agent Skills format (skills/<name>/SKILL.md):
 The agent always sees only each skill's name and description. It opens a skill with use_skill
 when the question fits, then follows the steps and tags each tool call with the step it does.
 
+Only LIVE skills are offered to the agent. A draft is offered only to an investigation that was
+started to try it ("Try this skill"); a skill that is off is never offered. Only a reviewed skill
+can be live.
+
 Rules, checked by code when the skills are loaded. A skill that breaks one is left out and its
 problems are listed (Skills page), so one typo never stops the agent:
 - name: lowercase letters, digits and hyphens, at most 64 characters, the same as the folder;
 - description: required, at most 300 characters;
 - numbered steps 1, 2, 3... (at least 1, at most MAX_STEPS); text after a step is indented;
-- `backticks` hold only tool names, and every tool named must exist.
+- `backticks` hold only tool names, and every tool named must exist;
+- status: draft, live or off; live needs reviewed_by.
 A skill cannot run anything: the agent still only calls the read-only tools.
 """
 
@@ -32,7 +38,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 import yaml
 from pydantic import BaseModel
@@ -42,6 +48,9 @@ MAX_DESCRIPTION = 300
 _NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _STEP = re.compile(r"^(\d+)\.\s+(\S.*)$")
 _TICKED = re.compile(r"`([^`]*)`")
+
+Status = Literal["draft", "live", "off"]
+STATUSES: tuple[str, ...] = get_args(Status)
 
 
 class Skill(BaseModel):
@@ -55,6 +64,8 @@ class Skill(BaseModel):
     path: str  # relative to the skills folder
     updated_by: str = ""  # who saved it last on the Skills page (empty: written by hand)
     updated_at: str = ""
+    status: Status = "draft"  # only live skills are offered to the agent
+    reviewed_at: str = ""
 
 
 class SkillProblem(BaseModel):
@@ -67,9 +78,25 @@ class SkillLibrary:
     skills: dict[str, Skill] = field(default_factory=dict)
     problems: list[SkillProblem] = field(default_factory=list)
     tools_checked: bool = True  # False when the tool list was not available to check against
+    trying: str | None = None  # the skill an engineer started this investigation to try
 
     def get(self, name: str) -> Skill | None:
         return self.skills.get(name.strip().lower())
+
+    def for_agent(self, trying: str | None = None) -> "SkillLibrary":
+        """The skills one investigation may use: the live ones, and the one being tried (whatever
+        its status). A skill that is not offered cannot be opened either."""
+        tried = self.get(trying) if trying else None
+        offered = {
+            name: skill
+            for name, skill in self.skills.items()
+            if skill.status == "live" or (tried is not None and name == tried.name)
+        }
+        return SkillLibrary(
+            skills=offered,
+            tools_checked=self.tools_checked,
+            trying=tried.name if tried else None,
+        )
 
     def prompt_section(self) -> str:
         """Added to the agent's instructions: the list of skills, never their steps."""
@@ -83,6 +110,11 @@ class SkillLibrary:
             "(skill_step 0) only when they do not explain the problem, and say why in `reason`.",
         ]
         lines += [f"- {s.name}: {s.description}" for s in self.skills.values()]
+        if self.trying:
+            lines.append(
+                f"The engineer started this investigation to try the skill {self.trying}: open it "
+                "with use_skill first and follow it, unless the question has nothing to do with it."
+            )
         return "\n".join(lines) + "\n"
 
 
@@ -193,6 +225,18 @@ def parse_skill(
         for token in not_tools
     ]
 
+    raw_status = extra.get("status")
+    # YAML reads an unquoted `off` as false (and `on`/`yes` as true): take them as written.
+    if isinstance(raw_status, bool):
+        status = "off" if raw_status is False else "on"
+    else:
+        status = str(raw_status or "draft").strip().lower()
+    reviewed_by = str(extra.get("reviewed_by") or "")
+    if status not in STATUSES:
+        problems.append(f"status '{status}' must be draft, live or off")
+    elif status == "live" and not reviewed_by.strip():
+        problems.append("status is live but nobody reviewed it: a live skill needs reviewed_by")
+
     if problems:
         return None, problems
     return (
@@ -203,10 +247,12 @@ def parse_skill(
             steps=steps,
             tools=tools,
             author=str(extra.get("author") or ""),
-            reviewed_by=str(extra.get("reviewed_by") or ""),
+            reviewed_by=reviewed_by,
             path=f"{folder}/SKILL.md",
             updated_by=str(extra.get("updated_by") or ""),
             updated_at=str(extra.get("updated_at") or ""),
+            status=status,  # type: ignore[arg-type]  # one of STATUSES (checked above)
+            reviewed_at=str(extra.get("reviewed_at") or ""),
         ),
         [],
     )
