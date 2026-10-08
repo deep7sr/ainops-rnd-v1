@@ -6,6 +6,7 @@ import {
   Moon,
   Network,
   ScrollText,
+  Server,
   Sparkles,
   Sun,
   Wrench,
@@ -50,6 +51,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Troubleshoot',
     items: [
       { to: '/', label: 'Investigate', icon: Sparkles, end: true },
+      { to: '/inventory', label: 'Inventory', icon: Server },
       { to: '/cases', label: 'Cases', icon: ClipboardCheck },
       { to: '/history', label: 'History', icon: History },
     ],

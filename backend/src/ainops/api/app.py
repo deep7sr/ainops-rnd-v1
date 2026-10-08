@@ -32,7 +32,8 @@ from ainops.cases import (
     review_case,
 )
 from ainops.config import get_settings
-from ainops.inventory import load_inventory
+from ainops.inventory import UnknownDeviceError, load_inventory
+from ainops.inventory_view import device_detail, inventory_rows
 from ainops.network.audit import AuditLog
 from ainops.similar import Hints, clues_of, similar_cases
 from ainops.topology.discovery import discover
@@ -413,6 +414,56 @@ async def review(case_id: str, body: ReviewRequest) -> dict[str, Any]:
     except CaseError as error:
         raise HTTPException(409, str(error)) from None
     return case.model_dump()
+
+
+# ---------- inventory (every device AINOPS knows, and its status) ----------
+
+
+def _graph_and_cases() -> tuple[dict[str, Any] | None, list[Case] | None, str | None]:
+    """The graph snapshot and all cases. The page still lists the devices when they fail."""
+    try:
+        snapshot = store().snapshot()
+    except Exception as error:  # noqa: BLE001 - shown on the page
+        return None, None, f"knowledge graph not reachable: {type(error).__name__}"
+    try:
+        found: list[Case] | None = cases().all()
+    except Exception:  # noqa: BLE001 - the case counts are left out
+        found = None
+    return snapshot, found, None
+
+
+@app.get("/api/inventory")
+async def inventory_list() -> dict[str, Any]:
+    inventory = load_inventory(settings.lab_inventory)
+    snapshot, found, problem = await asyncio.to_thread(_graph_and_cases)
+    return {
+        "devices": inventory_rows(inventory, snapshot, found),
+        "sites": inventory.sites,
+        "discovery": (snapshot or {}).get("discovery"),
+        "graph_error": problem,
+    }
+
+
+@app.get("/api/inventory/{name}")
+async def inventory_device(name: str) -> dict[str, Any]:
+    inventory = load_inventory(settings.lab_inventory)
+    try:
+        device = inventory.get(name)
+    except UnknownDeviceError as error:
+        raise HTTPException(404, str(error)) from None
+    snapshot, found, problem = await asyncio.to_thread(_graph_and_cases)
+    runs = [
+        {
+            "id": run.id,
+            "title": run.title,
+            "started_at": run.started_at,
+            "events": run.events,
+            "summary": run.summary(),
+        }
+        for run in registry.runs.values()
+        if run.kind == "investigation"
+    ]
+    return {**device_detail(inventory, device, snapshot, found, runs), "graph_error": problem}
 
 
 # ---------- audit ----------

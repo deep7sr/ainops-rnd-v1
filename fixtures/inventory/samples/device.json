@@ -1,0 +1,95 @@
+{
+  "row": {
+    "name": "IPLC-RTR-MAA",
+    "aliases": [
+      "MAA-P2P"
+    ],
+    "site": "MAA",
+    "site_name": "Chennai",
+    "role": "wan-router",
+    "platform": "cisco_ios",
+    "description": "MAA end of the TRV-MAA leased line (IPLC)",
+    "connection": "EVE-NG console, port 32776",
+    "credential_ref": null,
+    "status": {
+      "state": "reached",
+      "at": "2026-10-07T09:50:00+00:00",
+      "last_seen": "2026-10-07T09:50:00+00:00",
+      "error": null
+    },
+    "interfaces": {
+      "total": 3,
+      "addressed": 2,
+      "addressed_down": 1
+    },
+    "cases": {
+      "total": 1,
+      "pending": 0
+    }
+  },
+  "interfaces": [
+    {
+      "name": "Fa0/0",
+      "status": "up",
+      "ipv4": [
+        "10.10.5.1/24"
+      ],
+      "stale_since": null
+    },
+    {
+      "name": "Fa2/0",
+      "status": "administratively down",
+      "ipv4": [
+        "10.10.4.2/24"
+      ],
+      "stale_since": null
+    },
+    {
+      "name": "Fa1/0",
+      "status": "down",
+      "ipv4": [],
+      "stale_since": null
+    }
+  ],
+  "links": [
+    {
+      "key": "k1",
+      "a": "IPLC-RTR-TRV",
+      "a_interface": "Fa2/0",
+      "b": "IPLC-RTR-MAA",
+      "b_interface": "Fa2/0",
+      "subnet": "10.10.4.0/24",
+      "sources": [
+        "cdp"
+      ]
+    }
+  ],
+  "ospf_peers": [
+    {
+      "device": "IPLC-RTR-MAA",
+      "peer": "IPLC-RTR-TRV",
+      "interface": "Fa2/0",
+      "address": "10.10.4.1",
+      "neighbor_id": "1.1.1.1"
+    }
+  ],
+  "cases": [
+    {
+      "id": "case-abc123",
+      "status": "approved",
+      "question": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+      "root_cause": "Fa2/0 on IPLC-RTR-MAA was shut during a change and not brought back",
+      "updated_at": "2026-10-07T10:00:00+00:00"
+    }
+  ],
+  "investigations": [
+    {
+      "id": "inv-fault1",
+      "title": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+      "started_at": "2026-10-05T15:29:13+00:00",
+      "outcome": "diagnosed",
+      "checks": 1
+    }
+  ],
+  "graph_error": null
+}

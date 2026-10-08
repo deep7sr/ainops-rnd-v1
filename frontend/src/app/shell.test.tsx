@@ -55,6 +55,7 @@ describe('the menu', () => {
     openAt('/')
     expect(menu('Troubleshoot')).toEqual([
       ['Investigate', '/'],
+      ['Inventory', '/inventory'],
       ['Cases', '/cases'],
       ['History', '/history'],
     ])

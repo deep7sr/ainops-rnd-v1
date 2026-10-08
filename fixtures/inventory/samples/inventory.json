@@ -1,0 +1,237 @@
+{
+  "devices": [
+    {
+      "name": "ISP-TRV-1",
+      "aliases": [],
+      "site": "TRV",
+      "site_name": "Trivandrum",
+      "role": "isp-router",
+      "platform": "cisco_ios",
+      "description": "TRV Internet edge router",
+      "connection": "EVE-NG console, port 32770",
+      "credential_ref": null,
+      "status": {
+        "state": "reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-07T09:50:00+00:00",
+        "error": null
+      },
+      "interfaces": {
+        "total": 1,
+        "addressed": 1,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    {
+      "name": "FWL-TRV",
+      "aliases": [],
+      "site": "TRV",
+      "site_name": "Trivandrum",
+      "role": "firewall",
+      "platform": "juniper_junos",
+      "description": "TRV firewall (vSRX)",
+      "connection": "EVE-NG console, port 32771",
+      "credential_ref": "lab-srx-admin",
+      "status": {
+        "state": "reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-07T09:50:00+00:00",
+        "error": null
+      },
+      "interfaces": {
+        "total": 1,
+        "addressed": 1,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    {
+      "name": "CORE-SW-TRV",
+      "aliases": [],
+      "site": "TRV",
+      "site_name": "Trivandrum",
+      "role": "core",
+      "platform": "cisco_ios",
+      "description": "TRV core router, gateway of the TRV LAN 192.168.100.0/24",
+      "connection": "EVE-NG console, port 32769",
+      "credential_ref": null,
+      "status": {
+        "state": "reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-07T09:50:00+00:00",
+        "error": null
+      },
+      "interfaces": {
+        "total": 1,
+        "addressed": 1,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    {
+      "name": "IPLC-RTR-TRV",
+      "aliases": [
+        "TRV-P2P"
+      ],
+      "site": "TRV",
+      "site_name": "Trivandrum",
+      "role": "wan-router",
+      "platform": "cisco_ios",
+      "description": "TRV end of the TRV-MAA leased line (IPLC)",
+      "connection": "EVE-NG console, port 32775",
+      "credential_ref": null,
+      "status": {
+        "state": "reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-07T09:50:00+00:00",
+        "error": null
+      },
+      "interfaces": {
+        "total": 1,
+        "addressed": 1,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    {
+      "name": "IPLC-RTR-MAA",
+      "aliases": [
+        "MAA-P2P"
+      ],
+      "site": "MAA",
+      "site_name": "Chennai",
+      "role": "wan-router",
+      "platform": "cisco_ios",
+      "description": "MAA end of the TRV-MAA leased line (IPLC)",
+      "connection": "EVE-NG console, port 32776",
+      "credential_ref": null,
+      "status": {
+        "state": "reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-07T09:50:00+00:00",
+        "error": null
+      },
+      "interfaces": {
+        "total": 3,
+        "addressed": 2,
+        "addressed_down": 1
+      },
+      "cases": {
+        "total": 1,
+        "pending": 0
+      }
+    },
+    {
+      "name": "CORE-SW-MAA",
+      "aliases": [],
+      "site": "MAA",
+      "site_name": "Chennai",
+      "role": "core",
+      "platform": "cisco_ios",
+      "description": "MAA core router, gateway of the MAA LAN 192.168.200.0/24",
+      "connection": "EVE-NG console, port 32774",
+      "credential_ref": null,
+      "status": {
+        "state": "reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-07T09:50:00+00:00",
+        "error": null
+      },
+      "interfaces": {
+        "total": 1,
+        "addressed": 1,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    {
+      "name": "FWL-MAA",
+      "aliases": [],
+      "site": "MAA",
+      "site_name": "Chennai",
+      "role": "firewall",
+      "platform": "juniper_junos",
+      "description": "MAA firewall (vSRX)",
+      "connection": "EVE-NG console, port 32773",
+      "credential_ref": "lab-srx-admin",
+      "status": {
+        "state": "not_reached",
+        "at": "2026-10-07T09:50:00+00:00",
+        "last_seen": "2026-10-06T08:00:00+00:00",
+        "error": "NetmikoAuthenticationException: login failed"
+      },
+      "interfaces": {
+        "total": 1,
+        "addressed": 1,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    {
+      "name": "ISP-MAA-1",
+      "aliases": [],
+      "site": "MAA",
+      "site_name": "Chennai",
+      "role": "isp-router",
+      "platform": "cisco_ios",
+      "description": "MAA Internet edge router",
+      "connection": "EVE-NG console, port 32772",
+      "credential_ref": null,
+      "status": {
+        "state": "not_discovered",
+        "at": null,
+        "last_seen": null,
+        "error": null
+      },
+      "interfaces": {
+        "total": 0,
+        "addressed": 0,
+        "addressed_down": 0
+      },
+      "cases": {
+        "total": 0,
+        "pending": 0
+      }
+    }
+  ],
+  "sites": {
+    "TRV": "Trivandrum",
+    "MAA": "Chennai"
+  },
+  "discovery": {
+    "at": "2026-10-07T09:50:00+00:00",
+    "source": "live",
+    "devices_ok": [
+      "ISP-TRV-1",
+      "FWL-TRV",
+      "CORE-SW-TRV",
+      "IPLC-RTR-TRV",
+      "IPLC-RTR-MAA",
+      "CORE-SW-MAA"
+    ],
+    "devices_failed": [
+      "FWL-MAA: NetmikoAuthenticationException: login failed",
+      "ISP-MAA-1: TimeoutError"
+    ]
+  },
+  "graph_error": null
+}

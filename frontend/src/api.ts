@@ -43,6 +43,9 @@ export const api = {
       body: JSON.stringify({ question }),
     }),
   investigations: () => request<RunSummary[]>('/api/investigations'),
+  inventory: () => request<InventoryList>('/api/inventory'),
+  inventoryDevice: (name: string) =>
+    request<InventoryDetail>(`/api/inventory/${encodeURIComponent(name)}`),
   /** A follow-up in the conversation of an investigation: AINOPS replies in a new turn. */
   sendMessage: (runId: string, text: string) =>
     request<{ id: string; turn: number }>(`/api/runs/${runId}/messages`, {
@@ -191,6 +194,77 @@ export interface RunSummary {
   messages?: number
   /** The conversation's case, if it has one (missing when Neo4j cannot be reached). */
   case_status?: CaseStatus | null
+}
+
+// ---------- inventory (backend inventory_view.py) ----------
+
+export type DeviceState = 'reached' | 'not_reached' | 'not_discovered'
+
+/** What the last discovery says about a device (no polling). */
+export interface DeviceStatus {
+  state: DeviceState
+  /** When the last discovery ran. */
+  at: string | null
+  /** When the device last answered (for one that did not answer the last discovery). */
+  last_seen: string | null
+  /** Why the last discovery could not reach it. */
+  error: string | null
+}
+
+export interface InventoryRow {
+  name: string
+  aliases: string[]
+  site: string
+  site_name: string
+  role: string
+  platform: string
+  description: string
+  /** How AINOPS reaches it, e.g. "EVE-NG console, port 32771". */
+  connection: string
+  /** Name of the login profile in .env; never the secret itself. Null: no login needed. */
+  credential_ref: string | null
+  status: DeviceStatus
+  interfaces: { total: number; addressed: number; addressed_down: number }
+  /** Null when the cases could not be read. */
+  cases: { total: number; pending: number } | null
+}
+
+export interface InventoryList {
+  devices: InventoryRow[]
+  sites: Record<string, string>
+  discovery: Discovery | null
+  /** Why the knowledge graph could not be read (the devices are still listed). */
+  graph_error: string | null
+}
+
+export interface InventoryDetail {
+  row: InventoryRow
+  interfaces: GraphInterface[]
+  links: GraphLink[]
+  ospf_peers: {
+    device: string
+    peer: string
+    interface: string
+    address: string
+    neighbor_id: string
+  }[]
+  cases:
+    | {
+        id: string
+        status: CaseStatus
+        question: string
+        root_cause: string | null
+        updated_at: string
+      }[]
+    | null
+  investigations: {
+    id: string
+    title: string
+    started_at: string
+    outcome: string | null
+    checks: number
+  }[]
+  graph_error: string | null
 }
 
 // ---------- cases (backend cases.py): what an investigation found, reviewed by an engineer ----------
