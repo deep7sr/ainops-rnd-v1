@@ -11,6 +11,19 @@ from ainops.network.audit import AuditLog
 from ainops.network.service import NetworkService, load_commands
 
 
+@pytest.fixture(autouse=True)
+def no_real_neo4j(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never reach the engineer's real Neo4j: any connection attempt fails at once.
+
+    (A test once wrote a made-up case into the real graph.) Tests that need a graph use fakes.
+    """
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise ConnectionError("tests never use the real Neo4j: use a fake")
+
+    monkeypatch.setattr("neo4j.GraphDatabase.driver", refuse)
+
+
 @pytest.fixture
 def audit(tmp_path: Path) -> AuditLog:
     return AuditLog(tmp_path / "audit.jsonl")

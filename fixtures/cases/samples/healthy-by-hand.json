@@ -1,0 +1,38 @@
+{
+  "id": "case-healthy1",
+  "run_id": "inv-healthy1",
+  "status": "pending",
+  "made_by": "engineer",
+  "created_at": "2026-10-07T10:00:00+00:00",
+  "updated_at": "2026-10-07T10:00:00+00:00",
+  "question": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+  "draft": {
+    "outcome": "no_fault_found",
+    "summary": "All network devices and links between TRV and MAA are up, OSPF is fully adjacently, routes exist, and the core switch can ping the destination host. The problem is likely on the user side (gateway configuration, host LAN, or access‑layer switch), not in the core network.",
+    "root_cause": null,
+    "evidence": [],
+    "confidence": "medium",
+    "devices": [],
+    "interfaces": [],
+    "path": [
+      "CORE-SW-TRV",
+      "IPLC-RTR-TRV",
+      "IPLC-RTR-MAA",
+      "CORE-SW-MAA"
+    ],
+    "path_note": "cabled path (not traced)",
+    "skills": [],
+    "suggested_fix": []
+  },
+  "conversation": [
+    {
+      "message": "Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?",
+      "outcome": "no_fault_found",
+      "root_cause": null
+    }
+  ],
+  "checks": 15,
+  "duration_ms": 393187,
+  "review": null,
+  "root_cause": null
+}

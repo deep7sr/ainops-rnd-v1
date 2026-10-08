@@ -55,6 +55,7 @@ describe('the menu', () => {
     openAt('/')
     expect(menu('Troubleshoot')).toEqual([
       ['Investigate', '/'],
+      ['Cases', '/cases'],
       ['History', '/history'],
     ])
     expect(menu('Behind the scenes')).toEqual([
@@ -68,5 +69,24 @@ describe('the menu', () => {
   it('names the page you are on in the header', () => {
     openAt('/graph')
     expect(screen.getByRole('banner')).toHaveTextContent('Network map')
+  })
+})
+
+describe('the Cases menu item', () => {
+  it('shows how many cases wait for review', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        url === '/api/cases'
+          ? Promise.resolve(
+              new Response(
+                JSON.stringify({ cases: [], counts: { pending: 2, approved: 5, rejected: 1 } }),
+              ),
+            )
+          : new Promise(() => {}),
+      ),
+    )
+    openAt('/')
+    expect(await screen.findByLabelText('2 waiting for review')).toHaveTextContent('2')
   })
 })

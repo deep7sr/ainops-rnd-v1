@@ -210,7 +210,8 @@ class GraphStore:
         self._write("CREATE (r:Discovery) SET r = $run", run=run)
 
     def clear(self) -> None:
-        self._write("MATCH (n) DETACH DELETE n")
+        """Empty the network graph. Cases (case_store.py) are the engineers' work: kept."""
+        self._write("MATCH (n) WHERE NOT n:Case DETACH DELETE n")
 
     # ---------- read by the topology tools and the UI ----------
 

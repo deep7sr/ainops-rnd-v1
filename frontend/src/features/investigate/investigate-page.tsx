@@ -17,6 +17,7 @@ import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { CaseSection } from '@/features/cases/case-section'
 import { NetworkMap } from '@/features/topology/network-map'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
@@ -419,6 +420,16 @@ function Run({ runId }: { runId: string }) {
   const refusals = view.steps.filter((s) => s.kind === 'refused').length
   const device = topology.data?.devices.find((d) => d.name === panelDevice) ?? null
   const latest = turns[turns.length - 1]
+  // The case events of the latest reply: drafted, updated, or not saved.
+  const caseEvents = events.filter((e) => e.type === 'case').length
+  const notSaved = useMemo(() => {
+    let note: string | null = null
+    for (const event of events) {
+      if (event.type === 'message') note = null
+      else if (event.type === 'case') note = event.error ?? null
+    }
+    return note
+  }, [events])
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
@@ -494,6 +505,14 @@ function Run({ runId }: { runId: string }) {
 
           {view.verdict && !waiting && (
             <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />
+          )}
+          {!running && (
+            <CaseSection
+              runId={runId}
+              outcome={view.verdict?.report.outcome ?? null}
+              caseEvents={caseEvents}
+              notSaved={notSaved}
+            />
           )}
         </div>
 

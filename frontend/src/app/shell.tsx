@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   BookOpenCheck,
+  ClipboardCheck,
   History,
   Moon,
   Network,
@@ -26,6 +27,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -48,6 +50,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Troubleshoot',
     items: [
       { to: '/', label: 'Investigate', icon: Sparkles, end: true },
+      { to: '/cases', label: 'Cases', icon: ClipboardCheck },
       { to: '/history', label: 'History', icon: History },
     ],
   },
@@ -134,6 +137,13 @@ export function Shell() {
   const location = useLocation()
   const { resolved, setChoice } = useTheme()
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15000 })
+  // How many cases wait for review, next to "Cases" (shared with the Cases page's lists).
+  const cases = useQuery({
+    queryKey: ['cases', 'all'],
+    queryFn: () => api.cases(),
+    refetchInterval: 30000,
+  })
+  const pending = cases.data?.counts.pending ?? 0
   const current = NAV.find((item) => isActive(location.pathname, item))
 
   useEffect(() => {
@@ -170,6 +180,11 @@ export function Shell() {
                           <span>{item.label}</span>
                         </NavLink>
                       </SidebarMenuButton>
+                      {item.to === '/cases' && pending > 0 && (
+                        <SidebarMenuBadge aria-label={`${pending} waiting for review`}>
+                          {pending}
+                        </SidebarMenuBadge>
+                      )}
                     </SidebarMenuItem>
                   ))}
                 </SidebarMenu>

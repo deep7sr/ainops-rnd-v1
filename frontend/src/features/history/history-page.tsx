@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { api } from '@/api'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CaseStatusBadge } from '@/features/cases/case-view'
 import { formatMs } from '@/features/investigate/format'
 
 export function HistoryPage() {
@@ -47,6 +48,11 @@ export function HistoryPage() {
                 <span className="col-span-full text-xs text-muted-foreground">
                   {new Date(run.started_at).toLocaleString()}
                   {(run.messages ?? 1) > 1 && ` · conversation of ${run.messages} messages`}
+                  {run.case_status && (
+                    <span className="ml-2 align-middle">
+                      <CaseStatusBadge status={run.case_status} />
+                    </span>
+                  )}
                 </span>
               </Link>
             </li>

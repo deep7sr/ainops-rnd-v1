@@ -21,6 +21,18 @@ def test_there_is_no_setting_to_answer_from_saved_outputs() -> None:
 
 def test_the_network_server_always_uses_the_live_devices(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server.settings, "lab_eve_host", "eve.test")
+
+    class Graph:  # stands in for Neo4j (tests never use the real one)
+        def __init__(self, *args: object) -> None:
+            pass
+
+        def owner_of_ip(self, address: str) -> list[dict[str, Any]]:
+            return []
+
+        def ospf_peers(self, device: str | None = None) -> list[dict[str, Any]]:
+            return []
+
+    monkeypatch.setattr(server, "GraphStore", Graph)
     assert isinstance(server.build_service().executor, LiveExecutor)
 
 

@@ -51,6 +51,14 @@ export const api = {
     }),
   stopRun: (runId: string) =>
     request<{ stopping: boolean }>(`/api/runs/${runId}/stop`, { method: 'POST' }),
+  cases: (status?: CaseStatus) =>
+    request<CaseList>(status ? `/api/cases?status=${status}` : '/api/cases'),
+  case: (id: string) => request<Case>(`/api/cases/${id}`),
+  /** The case of a conversation, and whether one can be made by hand now. */
+  runCase: (runId: string) => request<RunCase>(`/api/runs/${runId}/case`),
+  makeCase: (runId: string) => request<Case>(`/api/runs/${runId}/case`, { method: 'POST' }),
+  reviewCase: (id: string, review: ReviewRequest) =>
+    request<Case>(`/api/cases/${id}/review`, { method: 'POST', body: JSON.stringify(review) }),
   audit: () => request<AuditEntry[]>('/api/audit?limit=200'),
   skills: () => request<SkillCatalog>('/api/skills'),
 }
@@ -181,6 +189,81 @@ export interface RunSummary {
   duration_ms: number | null
   /** Messages the engineer sent: the question plus each follow-up (missing in old answers). */
   messages?: number
+  /** The conversation's case, if it has one (missing when Neo4j cannot be reached). */
+  case_status?: CaseStatus | null
+}
+
+// ---------- cases (backend cases.py): what an investigation found, reviewed by an engineer ----------
+
+export type CaseStatus = 'pending' | 'approved' | 'rejected'
+
+export interface CaseEvidence {
+  id: string
+  tool: string
+  device: string | null
+  summary: string
+}
+
+/** What AINOPS concluded, exactly as its reply said it; a review never changes it. */
+export interface CaseDraft {
+  outcome: Report['outcome']
+  summary: string
+  root_cause: string | null
+  evidence: CaseEvidence[]
+  confidence: string | null
+  devices: string[]
+  /** "IPLC-RTR-MAA Fa2/0" */
+  interfaces: string[]
+  path: string[]
+  path_note: string | null
+  skills: string[]
+  suggested_fix: string[]
+}
+
+export interface CaseReview {
+  action: 'approve' | 'correct' | 'reject'
+  reviewer: string
+  at: string
+  root_cause: string | null
+  fix_applied: string | null
+  fix_worked: 'yes' | 'no' | 'unknown' | null
+  reason: string | null
+}
+
+export interface Case {
+  id: string
+  run_id: string
+  status: CaseStatus
+  made_by: 'ainops' | 'engineer'
+  created_at: string
+  updated_at: string
+  question: string
+  draft: CaseDraft
+  conversation: { message: string; outcome: string | null; root_cause: string | null }[]
+  checks: number
+  duration_ms: number
+  review: CaseReview | null
+  /** The engineer's correction if there is one, else the AI's root cause. */
+  root_cause: string | null
+}
+
+export interface CaseList {
+  cases: Case[]
+  counts: Record<CaseStatus, number>
+}
+
+export interface RunCase {
+  case: Case | null
+  can_make: boolean
+}
+
+export interface ReviewRequest {
+  action: CaseReview['action']
+  reviewer: string
+  root_cause?: string
+  fix_applied?: string
+  fix_worked?: CaseReview['fix_worked']
+  reason?: string
 }
 
 export interface AuditEntry {
@@ -272,6 +355,8 @@ export type RunEvent =
   /** A follow-up from the engineer: everything after it belongs to the next turn. */
   | { type: 'message'; turn: number; text: string; at: string }
   | { type: 'stopped'; message: string }
+  /** After a reply that found a root cause: its case was drafted or updated (or not saved). */
+  | { type: 'case'; id?: string; status?: CaseStatus; error?: string }
   | { type: 'thought'; text: string; tools: string[]; at_ms: number }
   | {
       type: 'tool_call'

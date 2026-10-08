@@ -5,6 +5,7 @@ discovery calls the network MCP server. It streams their steps to the browser as
 Events, serves the knowledge graph for the map, and shows the MCP tool definitions.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -19,6 +20,8 @@ from ainops.agent.conversation import earlier_of
 from ainops.agent.runner import investigate
 from ainops.agent.skills import load_skills
 from ainops.api.runs import Refused, Run, RunRegistry
+from ainops.case_store import CaseBook, Neo4jCases
+from ainops.cases import BY_HAND, Case, CaseError, ReviewRequest, draft_case, follow, review_case
 from ainops.config import get_settings
 from ainops.inventory import load_inventory
 from ainops.network.audit import AuditLog
@@ -41,6 +44,10 @@ def store() -> GraphStore:
             settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
         )
     return _store
+
+
+def cases() -> CaseBook:
+    return Neo4jCases(store().driver)
 
 
 @asynccontextmanager
@@ -188,6 +195,7 @@ async def start_investigation(body: Question) -> dict[str, str]:
 
     async def work(run: Run) -> None:
         await investigate(question, run.emit, settings)
+        await _record_case(run)
 
     run = registry.start("investigation", question, work)
     return {"id": run.id}
@@ -195,7 +203,12 @@ async def start_investigation(body: Question) -> dict[str, str]:
 
 @app.get("/api/investigations")
 async def investigations() -> list[dict[str, Any]]:
-    return registry.recent("investigation")
+    runs = registry.recent("investigation")
+    try:
+        statuses = await asyncio.to_thread(cases().statuses, [r["id"] for r in runs])
+    except Exception:  # noqa: BLE001 - Neo4j down: the list still shows, without case tags
+        statuses = {}
+    return [{**r, "case_status": statuses.get(r["id"])} for r in runs]
 
 
 @app.get("/api/runs/{run_id}")
@@ -238,6 +251,7 @@ async def send_message(run_id: str, body: Message) -> dict[str, Any]:
 
     async def work(current: Run) -> None:
         await investigate(text, current.emit, settings, earlier)
+        await _record_case(current)
 
     try:
         turn = await registry.follow_up(run_id, text, work)
@@ -255,6 +269,116 @@ async def stop_run(run_id: str) -> dict[str, bool]:
     except Refused as refused:
         raise HTTPException(409, str(refused)) from None
     return {"stopping": True}
+
+
+# ---------- cases (what an investigation found, reviewed by an engineer) ----------
+
+
+def _device_names() -> list[str]:
+    return [str(d["name"]) for d in store().devices()]
+
+
+def _draft_and_save(run: Run) -> Case | None:
+    draft = draft_case(run.id, run.title, run.started_at, run.events, _device_names())
+    if draft is None:
+        return None
+    book = cases()
+    existing = book.for_run(run.id)
+    case = follow(existing, draft) if existing else draft
+    if case is not existing:
+        book.save(case, only_if="pending" if existing else None)
+    return case
+
+
+async def _record_case(run: Run) -> None:
+    """After a reply that found a root cause: draft the conversation's case, or bring a pending
+    one up to date. A case that cannot be saved never fails the investigation."""
+    if run.summary()["outcome"] != "diagnosed":  # how this reply (the latest turn) ended
+        return
+    try:
+        case = await asyncio.to_thread(_draft_and_save, run)
+    except Exception as error:  # noqa: BLE001 - shown on the page, the diagnosis stands
+        await run.emit({"type": "case", "error": f"case not saved: {type(error).__name__}"})
+        return
+    if case is not None:
+        await run.emit({"type": "case", "id": case.id, "status": case.status})
+
+
+def _case_or_404(case_id: str) -> Case:
+    case = cases().get(case_id)
+    if case is None:
+        raise HTTPException(404, "unknown case")
+    return case
+
+
+@app.get("/api/cases")
+async def case_list(status: str | None = None) -> dict[str, Any]:
+    book = cases()
+    found = await asyncio.to_thread(book.all, status)
+    counts = await asyncio.to_thread(book.counts)
+    return {"cases": [c.model_dump() for c in found], "counts": counts}
+
+
+@app.get("/api/cases/{case_id}")
+async def case_detail(case_id: str) -> dict[str, Any]:
+    return (await asyncio.to_thread(_case_or_404, case_id)).model_dump()
+
+
+@app.get("/api/runs/{run_id}/case")
+async def run_case(run_id: str) -> dict[str, Any]:
+    """The case of a conversation, and whether the engineer can make one by hand now."""
+    run = registry.runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, "unknown run")
+    case = await asyncio.to_thread(cases().for_run, run_id)
+    latest = run.summary()["outcome"]
+    return {
+        "case": case.model_dump() if case else None,
+        "can_make": case is None and run.done and latest in BY_HAND,
+    }
+
+
+@app.post("/api/runs/{run_id}/case")
+async def make_case(run_id: str) -> dict[str, Any]:
+    """The engineer asks for a case, e.g. for an inconclusive run whose real cause they know."""
+    run = registry.runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, "unknown run")
+    if not run.done:
+        raise HTTPException(409, "wait for AINOPS to finish its reply")
+
+    def make() -> Case:
+        book = cases()
+        if book.for_run(run_id) is not None:
+            raise CaseError("this conversation already has a case")
+        names = _device_names()
+        case = draft_case(run.id, run.title, run.started_at, run.events, names, by_hand=True)
+        if case is None:
+            raise CaseError("no reply here to make a case of (only refusals or plain answers)")
+        book.save(case)
+        return case
+
+    try:
+        case = await asyncio.to_thread(make)
+    except CaseError as error:
+        raise HTTPException(409, str(error)) from None
+    return case.model_dump()
+
+
+@app.post("/api/cases/{case_id}/review")
+async def review(case_id: str, body: ReviewRequest) -> dict[str, Any]:
+    def apply() -> Case:
+        case = _case_or_404(case_id)
+        reviewed = review_case(case, body)
+        if not cases().save(reviewed, only_if="pending"):
+            raise CaseError("someone else reviewed this case a moment ago: reload it")
+        return reviewed
+
+    try:
+        case = await asyncio.to_thread(apply)
+    except CaseError as error:
+        raise HTTPException(409, str(error)) from None
+    return case.model_dump()
 
 
 # ---------- audit ----------
