@@ -244,7 +244,8 @@ async def ping(
 ) -> ToolResult:
     """Send 5 pings FROM the device to an IPv4 address. Use to test reachability hop by hop along a
     path. Only use addresses from the question, the inventory or earlier tool results; never guess.
-    Note: the lab vSRX firewalls do not answer pings to their own interfaces."""
+    Note: the lab vSRX firewalls do not answer pings to their own interfaces. Losing only the first
+    ping (".!!!!") is normal: the router was looking up the address (ARP); it is not a problem."""
     return await _call(service().ping, device, destination)
 
 

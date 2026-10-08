@@ -56,7 +56,32 @@ def test_junos_ping() -> None:
         "received": 4,
         "success_percent": 80,
         "avg_rtt_ms": 2.5,
+        "replies": None,  # five "!" but four replies: marks that disagree are not trusted
     }
+    assert parsers.ping("juniper_junos", text.replace("!!!!!", ".!!!!"))["replies"] == ".!!!!"
+
+
+def cisco_ping(marks: str, received: int) -> str:
+    return (
+        "Type escape sequence to abort.\n"
+        "Sending 5, 100-byte ICMP Echos to 10.10.4.1, timeout is 2 seconds:\n"
+        f"{marks}\n"
+        f"Success rate is {received * 20} percent ({received}/5), "
+        "round-trip min/avg/max = 12/16/28 ms"
+    )
+
+
+def test_cisco_ping_keeps_the_reply_marks_in_order() -> None:
+    result = parsers.ping("cisco_ios", cisco_ping(".!!!!", 4))
+    assert result["replies"] == ".!!!!"
+    assert (result["sent"], result["received"]) == (5, 4)
+    assert parsers.ping("cisco_ios", cisco_ping("!!U!!", 4))["replies"] == "!!U!!"
+
+
+def test_cisco_ping_marks_are_not_trusted_when_missing_or_wrong() -> None:
+    assert parsers.ping("cisco_ios", cisco_ping("", 4))["replies"] is None
+    assert parsers.ping("cisco_ios", cisco_ping(".!!!", 3))["replies"] is None  # 4 marks, 5 sent
+    assert parsers.ping("cisco_ios", cisco_ping("!!!!!", 4))["replies"] is None  # 5 "!", 4 replies
 
 
 def test_junos_policies() -> None:

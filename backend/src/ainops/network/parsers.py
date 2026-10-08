@@ -458,6 +458,15 @@ _JUNOS_PING = re.compile(
     r"(\d+) packets transmitted, (\d+) packets received, ([\d.]+)% packet loss"
 )
 _JUNOS_RTT = re.compile(r"min/avg/max/stddev = [\d.]+/([\d.]+)/")
+# The reply marks, one per packet: "!" a reply, "." a timeout, U/Q/M/?/& Cisco error codes.
+_PING_MARKS = re.compile(r"^[!.UQM?&]+[ \t]*$", re.MULTILINE)
+
+
+def _replies(text: str, sent: int, received: int) -> str | None:
+    """The marks in packet order (e.g. ".!!!!"); None when missing or when they disagree with the
+    counts (not one per packet, or a different number of replies)."""
+    marks = "".join(line.strip() for line in _PING_MARKS.findall(text))
+    return marks if len(marks) == sent and marks.count("!") == received else None
 
 
 def ping(platform: str, text: str) -> dict[str, Any]:
@@ -471,6 +480,7 @@ def ping(platform: str, text: str) -> dict[str, Any]:
             "received": int(match[2]),
             "success_percent": int(match[1]),
             "avg_rtt_ms": float(rtt[1]) if rtt else None,
+            "replies": _replies(text, int(match[3]), int(match[2])),
         }
     match = _JUNOS_PING.search(text)
     if not match:
@@ -482,6 +492,7 @@ def ping(platform: str, text: str) -> dict[str, Any]:
         "received": received,
         "success_percent": round(100 * received / sent) if sent else 0,
         "avg_rtt_ms": float(rtt[1]) if rtt else None,
+        "replies": _replies(text, sent, received),
     }
 
 

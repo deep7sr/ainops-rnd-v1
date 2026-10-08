@@ -395,9 +395,14 @@ class NetworkService:
             result = parsers.ping(d.platform, raw.text)
             result["destination"] = target
             rtt = f", avg {result['avg_rtt_ms']:g} ms" if result["avg_rtt_ms"] is not None else ""
+            arp = (
+                "; first lost: normal (the router was looking up the address, ARP)"
+                if health.first_lost_only(result)
+                else ""
+            )
             return result, (
                 f"ping {target}: {result['received']}/{result['sent']} replies "
-                f"({result['success_percent']}%){rtt}"
+                f"({result['success_percent']}%){rtt}{arp}"
             )
 
         return self._run(

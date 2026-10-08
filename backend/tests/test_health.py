@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from ainops.network import health
 from ainops.network.service import NetworkService
 
@@ -49,6 +51,29 @@ def test_ping() -> None:
     assert health.ping(result(3)).issues[0].text == "2 of 5 pings to 192.168.200.10 lost"
 
 
+def ping_result(replies: str | None) -> dict[str, object]:
+    received = 4 if replies is None else replies.count("!")
+    return {"sent": 5, "received": received, "replies": replies, "destination": "10.10.4.1"}
+
+
+def test_ping_losing_only_the_first_packet_is_normal() -> None:
+    # Cisco "4/5, first lost": the router looked up the next hop's address (ARP) first.
+    assert health.ping(ping_result(".!!!!")) == health.Health(status="ok")
+
+
+@pytest.mark.parametrize("replies", ["!.!!!", "!!!!.", "..!!!", ".!!!U", "U!!!!", None])
+def test_any_other_loss_is_still_a_problem(replies: str | None) -> None:
+    verdict = health.ping(ping_result(replies))
+    assert verdict.status == "problem"
+    assert verdict.issues[0].text.endswith("pings to 10.10.4.1 lost")
+
+
+def test_one_packet_ping_that_failed_is_a_problem() -> None:
+    lone = {"sent": 1, "received": 0, "replies": ".", "destination": "10.10.4.1"}
+    assert health.ping(lone).status == "problem"
+    assert not health.first_lost_only(lone)  # the summary must not call it normal either
+
+
 def test_routes_and_interface_detail() -> None:
     assert health.routes_to("192.168.200.10", []).issues[0].text == "no route to 192.168.200.10"
     assert health.routes_to("192.168.200.10", [{"prefix": "192.168.200.0/24"}]).status == "ok"
@@ -83,6 +108,40 @@ def test_fault_recording_gives_a_problem(service: NetworkService, tmp_path: Path
     result = service.get_interfaces("IPLC-RTR-MAA")
     assert result.health.status == "problem"
     assert result.health.issues[0].interface == "Fa2/0"
+
+
+def replay_ping(service: NetworkService, tmp_path: Path, marks: str, received: int) -> None:
+    from replay import ReplayExecutor
+
+    from ainops.network.capture import fixture_path
+
+    path = fixture_path(tmp_path, "IPLC-RTR-TRV", "ping 10.10.4.2")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "Type escape sequence to abort.\n"
+        "Sending 5, 100-byte ICMP Echos to 10.10.4.2, timeout is 2 seconds:\n"
+        f"{marks}\n"
+        f"Success rate is {received * 20} percent ({received}/5), "
+        "round-trip min/avg/max = 12/16/28 ms",
+        encoding="utf-8",
+    )
+    service.executor = ReplayExecutor(tmp_path, delay_s=0)
+
+
+def test_first_lost_ping_is_ok_and_says_why(service: NetworkService, tmp_path: Path) -> None:
+    replay_ping(service, tmp_path, ".!!!!", 4)
+    result = service.ping("IPLC-RTR-TRV", "10.10.4.2")
+    assert result.health.status == "ok"
+    assert result.summary.endswith(
+        "; first lost: normal (the router was looking up the address, ARP)"
+    )
+
+
+def test_other_lost_ping_says_nothing_about_arp(service: NetworkService, tmp_path: Path) -> None:
+    replay_ping(service, tmp_path, "!!!!.", 4)
+    result = service.ping("IPLC-RTR-TRV", "10.10.4.2")
+    assert result.health.status == "problem"
+    assert "ARP" not in result.summary
 
 
 FAULT1_SHOW_IP_INTERFACE = """\

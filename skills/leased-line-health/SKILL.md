@@ -6,7 +6,8 @@ metadata:
   reviewed_by: ""
 ---
 The line is healthy only if all of these pass: the interface is up on both sides, the OSPF
-neighbour across it is FULL on both sides, a ping across it gets every reply, and there are no
+neighbour across it is FULL on both sides, a ping across it gets every reply (losing only the
+first one is normal: ARP), and there are no
 input errors or recent flaps. Report every check, also when the line is healthy.
 
 1. `get_device_links` on IPLC-RTR-TRV to find the link to MAA: the interface on each router and

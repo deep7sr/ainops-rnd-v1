@@ -93,11 +93,18 @@ def routes_to(destination: str, matches: list[dict[str, Any]]) -> Health:
     return _verdict([] if matches else [Issue(text=f"no route to {destination}")])
 
 
+def first_lost_only(result: dict[str, Any]) -> bool:
+    """Only the first packet lost (".!!!!"): normal, the router was looking up the next hop's
+    hardware address (ARP) and dropped the packet while it waited."""
+    sent: int = result["sent"]
+    return sent > 1 and result.get("replies") == "." + "!" * (sent - 1)
+
+
 def ping(result: dict[str, Any]) -> Health:
     sent, received = result["sent"], result["received"]
     if received == 0:
         return _verdict([Issue(text=f"no replies from {result['destination']} (0/{sent})")])
-    if received < sent:
+    if received < sent and not first_lost_only(result):
         return _verdict(
             [Issue(text=f"{sent - received} of {sent} pings to {result['destination']} lost")]
         )
