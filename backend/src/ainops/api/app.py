@@ -16,9 +16,10 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel, Field
 
+from ainops import skill_book
 from ainops.agent.conversation import Earlier, earlier_of
 from ainops.agent.runner import investigate
-from ainops.agent.skills import load_skills
+from ainops.agent.skills import Skill, load_skills, parse_skill
 from ainops.api.runs import Refused, Run, RunRegistry
 from ainops.case_store import CaseBook, Neo4jCases
 from ainops.cases import (
@@ -43,6 +44,7 @@ from ainops.inventory_edit import (
 from ainops.inventory_view import device_detail, inventory_rows
 from ainops.network.audit import AuditLog
 from ainops.similar import Hints, clues_of, similar_cases
+from ainops.skill_book import SkillConflict, SkillError, SkillForm, SkillSave
 from ainops.skill_usage import SkillUsage, skill_usage
 from ainops.topology.discovery import discover
 from ainops.topology.graph import GraphStore
@@ -158,22 +160,31 @@ async def call_tool(server: str, tool: str, call: ToolCall) -> dict[str, Any]:
 # ---------- expert skills ----------
 
 
+async def _known_tools() -> set[str] | None:
+    """The tool names of the running MCP servers; None when one is down (not checkable)."""
+    known: set[str] = set()
+    for url in MCP_SERVERS.values():
+        try:
+            known |= {t["name"] for t in await _list_tools(url)}
+        except Exception:  # noqa: BLE001 - reported as tools_checked=false
+            return None
+    return known
+
+
+def _version(name: str) -> str | None:
+    found = skill_book.read(settings.skills_dir, name)
+    return found[1] if found else None
+
+
 @app.get("/api/skills")
 async def skills() -> dict[str, Any]:
     """The skills the agent can use (with how often investigations used them), and the ones
-    left out with their problems.
+    left out with their problems. `version` identifies the file an edit starts from.
 
     Tool names are checked against the running MCP servers; if one is down they cannot be checked
     (tools_checked is false) and only the format is.
     """
-    known: set[str] | None = set()
-    for url in MCP_SERVERS.values():
-        try:
-            known = (known or set()) | {t["name"] for t in await _list_tools(url)}
-        except Exception:  # noqa: BLE001 - reported as tools_checked=false
-            known = None
-            break
-    library = load_skills(settings.skills_dir, known)
+    library = load_skills(settings.skills_dir, await _known_tools())
     usage = skill_usage(
         {
             "id": run.id,
@@ -187,12 +198,102 @@ async def skills() -> dict[str, Any]:
     )
     return {
         "skills": [
-            {**s.model_dump(), "usage": usage.get(s.name, SkillUsage()).model_dump()}
+            {
+                **s.model_dump(),
+                "usage": usage.get(s.name, SkillUsage()).model_dump(),
+                "version": _version(s.name),
+            }
             for s in library.skills.values()
         ],
         "problems": [p.model_dump() for p in library.problems],
         "tools_checked": library.tools_checked,
     }
+
+
+@app.post("/api/skills/check")
+async def skill_check(form: SkillForm) -> dict[str, Any]:
+    """The skill as the form would save it: its problems and its SKILL.md text (nothing saved)."""
+    known = await _known_tools()
+    skill, problems, text = skill_book.check(form, known)
+    return {
+        "skill": skill.model_dump() if skill else None,
+        "problems": problems,
+        "markdown": text,
+        "tools_checked": known is not None,
+    }
+
+
+def _skill_audit(tool: str, name: str, summary: str) -> None:
+    AuditLog(settings.logs_dir / "network-audit.jsonl").write(
+        tool=tool,
+        device=None,
+        command=None,
+        args={"skill": name},
+        source="skills",
+        outcome="ok",
+        summary=summary,
+        duration_ms=0,
+    )
+
+
+def _saved(request: SkillSave, skill: Skill, version: str, new: bool) -> dict[str, Any]:
+    by = " ".join(request.by.split())
+    _skill_audit(
+        "create_skill" if new else "edit_skill",
+        skill.name,
+        f"skill {skill.name} {'created' if new else 'changed'} by {by}"
+        + ("" if new else "; it needs a new review"),
+    )
+    return {**skill.model_dump(), "version": version}
+
+
+@app.post("/api/skills", status_code=201)
+async def skill_create(request: SkillSave) -> dict[str, Any]:
+    """A new skill, saved as skills/<name>/SKILL.md; the agent can use it from its next reply."""
+    if request.version is not None:
+        raise HTTPException(422, "a new skill has no version")
+    try:
+        skill, version, new = skill_book.save(settings.skills_dir, request, await _known_tools())
+    except SkillConflict as error:
+        raise HTTPException(409, str(error)) from None
+    except SkillError as error:
+        raise HTTPException(422, str(error)) from None
+    return _saved(request, skill, version, new)
+
+
+@app.put("/api/skills/{name}")
+async def skill_edit(name: str, request: SkillSave) -> dict[str, Any]:
+    """An edit of the skill the engineer opened (`version`); the replaced file is kept."""
+    if request.skill.name.strip().lower() != name:
+        raise HTTPException(422, "a skill keeps its name: make a new skill to rename it")
+    if request.version is None:
+        raise HTTPException(422, "say which version you edited (version)")
+    try:
+        skill, version, new = skill_book.save(settings.skills_dir, request, await _known_tools())
+    except SkillConflict as error:
+        raise HTTPException(409, str(error)) from None
+    except SkillError as error:
+        raise HTTPException(422, str(error)) from None
+    return _saved(request, skill, version, new)
+
+
+@app.get("/api/skills/{name}/history")
+async def skill_history(name: str) -> list[dict[str, Any]]:
+    try:
+        return [e.model_dump() for e in skill_book.history(settings.skills_dir, name)]
+    except SkillError as error:
+        raise HTTPException(404, str(error)) from None
+
+
+@app.get("/api/skills/{name}/history/{entry}")
+async def skill_old_version(name: str, entry: str) -> dict[str, Any]:
+    """A replaced version, read as the loader would (tool names are not checked: it is old)."""
+    try:
+        text = skill_book.old_version(settings.skills_dir, name, entry)
+    except SkillError as error:
+        raise HTTPException(404, str(error)) from None
+    skill, problems = parse_skill(name, text, None)
+    return {"skill": skill.model_dump() if skill else None, "problems": problems, "markdown": text}
 
 
 # ---------- knowledge graph ----------

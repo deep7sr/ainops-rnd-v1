@@ -72,6 +72,20 @@ export const api = {
     request<Case>(`/api/cases/${id}/review`, { method: 'POST', body: JSON.stringify(review) }),
   audit: () => request<AuditEntry[]>('/api/audit?limit=200'),
   skills: () => request<SkillCatalog>('/api/skills'),
+  /** The skill as the form would save it; nothing is saved. */
+  checkSkill: (form: SkillForm) =>
+    request<SkillCheck>('/api/skills/check', { method: 'POST', body: JSON.stringify(form) }),
+  createSkill: (save: SkillSave) =>
+    request<SavedSkill>('/api/skills', { method: 'POST', body: JSON.stringify(save) }),
+  editSkill: (name: string, save: SkillSave) =>
+    request<SavedSkill>(`/api/skills/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify(save),
+    }),
+  skillHistory: (name: string) =>
+    request<SkillHistoryEntry[]>(`/api/skills/${encodeURIComponent(name)}/history`),
+  skillOldVersion: (name: string, id: string) =>
+    request<OldSkill>(`/api/skills/${encodeURIComponent(name)}/history/${encodeURIComponent(id)}`),
 }
 
 // ---------- types (mirror the backend) ----------
@@ -458,6 +472,49 @@ export interface Skill {
   /** Empty while the skill is a draft. */
   reviewed_by: string
   path: string
+  /** Who saved it last on the Skills page, and when (empty: written by hand). */
+  updated_by: string
+  updated_at: string
+}
+
+/** What the skill form holds (backend skill_book.py). */
+export interface SkillForm {
+  name: string
+  description: string
+  intro: string
+  steps: string[]
+}
+
+export interface SkillSave {
+  skill: SkillForm
+  by: string
+  /** The version the engineer opened; null for a new skill. */
+  version: string | null
+}
+
+export interface SkillCheck {
+  /** The skill as it would be saved; null when it has problems. */
+  skill: Skill | null
+  problems: string[]
+  markdown: string
+  /** False when the MCP servers are down: tool names cannot be checked, nothing can be saved. */
+  tools_checked: boolean
+}
+
+export type SavedSkill = Skill & { version: string }
+
+export interface SkillHistoryEntry {
+  id: string
+  replaced_at: string
+  saved_by: string
+  saved_at: string
+  reviewed_by: string
+}
+
+export interface OldSkill {
+  skill: Skill | null
+  problems: string[]
+  markdown: string
 }
 
 /** An investigation that opened a skill (backend skill_usage.py). */
@@ -483,7 +540,8 @@ export interface SkillProblem {
 }
 
 export interface SkillCatalog {
-  skills: (Skill & { usage: SkillUsage })[]
+  /** `version` identifies the file an edit starts from. */
+  skills: (Skill & { usage: SkillUsage; version: string | null })[]
   /** Skills left out, with what to fix. */
   problems: SkillProblem[]
   /** False when the MCP servers were down: tool names could not be checked. */

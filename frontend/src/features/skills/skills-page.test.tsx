@@ -1,8 +1,9 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
-import type { SkillCatalog } from '@/api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { SkillCatalog, SkillHistoryEntry } from '@/api'
 import { outcomeLabel, skillTitle } from './labels'
 import { SkillsView } from './skills-page'
 
@@ -19,6 +20,9 @@ const catalog: SkillCatalog = {
       author: 'Praveen',
       reviewed_by: 'Praveen',
       path: 'link-check/SKILL.md',
+      updated_by: '',
+      updated_at: '',
+      version: 'v1',
       usage: {
         count: 7,
         last_at: '2026-10-07T09:00:00Z',
@@ -47,6 +51,9 @@ const catalog: SkillCatalog = {
       author: 'drafted by Claude',
       reviewed_by: '',
       path: 'ospf-neighbour-down/SKILL.md',
+      updated_by: '',
+      updated_at: '',
+      version: 'v2',
       usage: NEVER,
     },
   ],
@@ -56,9 +63,11 @@ const catalog: SkillCatalog = {
 
 function show(selected?: string, data: SkillCatalog = catalog) {
   return render(
-    <MemoryRouter>
-      <SkillsView catalog={data} selected={selected} />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <SkillsView catalog={data} selected={selected} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
@@ -185,5 +194,63 @@ describe('skill words', () => {
     expect(outcomeLabel('diagnosed')).toBe('Root cause found')
     expect(outcomeLabel(null)).toBe('Running')
     expect(outcomeLabel('something_new')).toBe('something new')
+  })
+})
+
+describe('editing and history from the Skills page', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('an opened skill links to its editor', () => {
+    show('link-check')
+    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute(
+      'href',
+      '/skills/link-check/edit',
+    )
+  })
+
+  it('a broken skill cannot be edited on the page', () => {
+    show('broken-one')
+    expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('History lists the replaced versions and opens one', async () => {
+    const entry: SkillHistoryEntry = {
+      id: '20261009T103000123456Z',
+      replaced_at: '2026-10-09T10:30:00+00:00',
+      saved_by: 'Praveen',
+      saved_at: '2026-10-09T09:00:00+00:00',
+      reviewed_by: 'Sudhir',
+    }
+    const old = { ...catalog.skills[0], intro: 'The old intro.' }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const respond = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body)))
+        if (url === '/api/skills/link-check/history') return respond([entry])
+        if (url === `/api/skills/link-check/history/${entry.id}`)
+          return respond({ skill: old, problems: [], markdown: '' })
+        return Promise.resolve(new Response('{}', { status: 404 }))
+      }),
+    )
+    const user = userEvent.setup()
+    show('link-check')
+    await user.click(screen.getByRole('button', { name: 'History' }))
+    const versions = await screen.findByRole('list', { name: 'Earlier versions' })
+    expect(versions).toHaveTextContent('saved by Praveen · reviewed by Sudhir')
+    await user.click(within(versions).getByRole('button'))
+    expect(await screen.findByText('The old intro.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'All versions' }))
+    expect(await screen.findByRole('list', { name: 'Earlier versions' })).toBeInTheDocument()
+  })
+
+  it('says when a skill has no earlier versions', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('[]'))),
+    )
+    const user = userEvent.setup()
+    show('link-check')
+    await user.click(screen.getByRole('button', { name: 'History' }))
+    expect(await screen.findByText(/No earlier versions/)).toBeInTheDocument()
   })
 })

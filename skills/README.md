@@ -7,7 +7,12 @@ step it carries out. The Investigate page shows which skill and which step.
 
 ## Writing one
 
-Make a folder named like the skill, with a `SKILL.md` file inside:
+The easy way: **Skills → New skill** in AINOPS, or **Edit** on an opened skill. The page checks
+every rule below while you type, writes the same `SKILL.md` file, keeps the version an edit
+replaces in `<name>/history/` (not in git), and records who saved it in the Audit log. An edit
+marks the skill not reviewed again.
+
+By hand: make a folder named like the skill, with a `SKILL.md` file inside:
 
 ```markdown
 ---

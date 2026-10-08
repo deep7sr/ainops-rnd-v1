@@ -53,6 +53,8 @@ class Skill(BaseModel):
     author: str
     reviewed_by: str  # empty while the skill is a draft
     path: str  # relative to the skills folder
+    updated_by: str = ""  # who saved it last on the Skills page (empty: written by hand)
+    updated_at: str = ""
 
 
 class SkillProblem(BaseModel):
@@ -203,6 +205,8 @@ def parse_skill(
             author=str(extra.get("author") or ""),
             reviewed_by=str(extra.get("reviewed_by") or ""),
             path=f"{folder}/SKILL.md",
+            updated_by=str(extra.get("updated_by") or ""),
+            updated_at=str(extra.get("updated_at") or ""),
         ),
         [],
     )

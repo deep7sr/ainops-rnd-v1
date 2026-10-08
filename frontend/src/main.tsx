@@ -10,6 +10,7 @@ import { CasesPage } from '@/features/cases/cases-page'
 import { HistoryPage } from '@/features/history/history-page'
 import { InventoryPage } from '@/features/inventory/inventory-page'
 import { InvestigatePage } from '@/features/investigate/investigate-page'
+import { SkillEditorPage } from '@/features/skills/skill-editor'
 import { SkillsPage } from '@/features/skills/skills-page'
 import { ToolsPage } from '@/features/tools/tools-page'
 import { TopologyPage } from '@/features/topology/topology-page'
@@ -27,7 +28,9 @@ const router = createBrowserRouter([
       { path: '/investigations/:id', element: <InvestigatePage /> },
       { path: '/graph', element: <TopologyPage /> },
       { path: '/skills', element: <SkillsPage /> },
+      { path: '/skills/new', element: <SkillEditorPage /> },
       { path: '/skills/:name', element: <SkillsPage /> },
+      { path: '/skills/:name/edit', element: <SkillEditorPage /> },
       { path: '/tools', element: <ToolsPage /> },
       { path: '/inventory', element: <InventoryPage /> },
       { path: '/inventory/:name', element: <InventoryPage /> },

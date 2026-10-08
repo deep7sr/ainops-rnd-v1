@@ -54,3 +54,6 @@ desktop.ini
 
 # --- Devices added on the AINOPS Inventory page (local to this machine) ---
 lab/inventory.local.yaml
+
+# Earlier versions of skills edited on the Skills page (git keeps the committed history)
+skills/*/history/

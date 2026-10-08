@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, BookOpenCheck, Search, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, BookOpenCheck, Pencil, Plus, Search, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { api, type SkillCatalog } from '@/api'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { shortDate, skillTitle } from './labels'
 import { NeedsFixingBadge } from './skill-badges'
+import { SkillHistory } from './skill-history'
 import { BrokenSkillView, SkillView } from './skill-view'
 
 // The expert skills: a list on the left, the opened skill on the right (each skill has its own
@@ -218,7 +220,20 @@ export function SkillsView({
                   There is no skill named "{wanted}".
                 </p>
               ) : opened.kind === 'skill' ? (
-                <SkillView skill={opened.skill} usage={opened.skill.usage} />
+                <SkillView
+                  skill={opened.skill}
+                  usage={opened.skill.usage}
+                  actions={
+                    <>
+                      <Button asChild size="sm">
+                        <Link to={`/skills/${encodeURIComponent(opened.skill.name)}/edit`}>
+                          <Pencil aria-hidden="true" /> Edit
+                        </Link>
+                      </Button>
+                      <SkillHistory name={opened.skill.name} />
+                    </>
+                  }
+                />
               ) : (
                 <BrokenSkillView problem={opened.problem} />
               )}
@@ -239,9 +254,16 @@ export function SkillsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-6 py-6">
       <div className="space-y-1">
-        <h1 className="flex items-center gap-2 text-xl font-semibold">
-          <BookOpenCheck aria-hidden="true" className="size-5 text-primary" /> Skills
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            <BookOpenCheck aria-hidden="true" className="size-5 text-primary" /> Skills
+          </h1>
+          <Button asChild>
+            <Link to="/skills/new">
+              <Plus aria-hidden="true" /> New skill
+            </Link>
+          </Button>
+        </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
           Checklists the network engineers wrote for common problems. AINOPS opens the one that fits
           a question and follows its steps; the Investigate page shows which step it is on.
