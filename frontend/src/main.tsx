@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MotionConfig } from 'motion/react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
@@ -50,7 +51,10 @@ createRoot(root).render(
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={200}>
-          <RouterProvider router={router} />
+          {/* Every `motion` animation stops moving for people who ask for reduced motion. */}
+          <MotionConfig reducedMotion="user">
+            <RouterProvider router={router} />
+          </MotionConfig>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

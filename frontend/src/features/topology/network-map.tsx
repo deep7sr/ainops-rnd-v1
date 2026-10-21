@@ -5,8 +5,9 @@
 // Colour is never the only signal: states also have icons, labels and line styles.
 
 import { CircleCheck, CircleX, Loader2, TriangleAlert } from 'lucide-react'
-import { useSyncExternalStore, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import type { GraphDevice, GraphLink, Topology } from '@/api'
+import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
 import {
   boxIssue,
@@ -28,23 +29,6 @@ import {
   VIEW_WIDTH,
   type Point,
 } from './layout'
-
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
-
-function subscribeMotion(onChange: () => void) {
-  const query = typeof window.matchMedia === 'function' ? window.matchMedia(REDUCED_MOTION) : null
-  query?.addEventListener('change', onChange)
-  return () => query?.removeEventListener('change', onChange)
-}
-
-/** SVG motion (the ping packets) is not covered by CSS `motion-reduce`, so ask the browser. */
-function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(
-    subscribeMotion,
-    () => typeof window.matchMedia === 'function' && window.matchMedia(REDUCED_MOTION).matches,
-    () => false,
-  )
-}
 
 /** Index of the hop this link is on (0 = first hop of the path), or -1. */
 function hopIndex(link: GraphLink, path: string[]): number {

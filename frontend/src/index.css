@@ -10,6 +10,10 @@
  *
  * Accessibility: `src/styles/tokens.test.ts` checks the contrast of every text/background pair listed
  * there in both themes (WCAG 2.1 AA). If you change a colour, run `npm test`.
+ *
+ * Look (2026-10-21, "watch the AI walk your network"): a dot-grid canvas behind the map, glass cards,
+ * teal glow on what is active, violet glow only where the AI acts. Motion timings live here and in
+ * `src/lib/motion.ts` (the same values; the token test checks they match).
  */
 
 @import 'tailwindcss';
@@ -154,6 +158,24 @@
   --lab: #f5a524;
   --lab-foreground: #231f20;
   --eyebrow: #006e74; /* dark teal: light teal on white is too faint for small text */
+
+  /* Look: glow around active things (teal) and around what the AI is doing (violet) */
+  --glow: rgb(0 151 172 / 0.3);
+  --glow-ring: rgb(0 151 172 / 0.45);
+  --ai-glow: rgb(107 63 160 / 0.28);
+  --ai-glow-ring: rgb(107 63 160 / 0.45);
+  /* Look: map canvas dots, glass cards (text on glass is checked over every surface) */
+  --grid-dot: #cfdadc;
+  --glass: rgb(255 255 255 / 0.78);
+  --glass-border: rgb(0 110 116 / 0.16);
+  --shadow-elevated: 0 1px 2px rgb(35 31 32 / 0.06), 0 10px 28px -14px rgb(0 110 116 / 0.35);
+
+  /* Theme-independent: motion. Same values as src/lib/motion.ts. */
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --motion-slow: 420ms;
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 /* Dark theme: built on UST soft black, with light teal as the accent */
@@ -213,6 +235,15 @@
   --lab: #f5a524;
   --lab-foreground: #231f20;
   --eyebrow: #2bb3c6; /* a lighter light teal, readable on soft black and on cards */
+
+  --glow: rgb(31 169 189 / 0.35);
+  --glow-ring: rgb(31 169 189 / 0.55);
+  --ai-glow: rgb(196 166 240 / 0.3);
+  --ai-glow-ring: rgb(196 166 240 / 0.5);
+  --grid-dot: #3b3637;
+  --glass: rgb(43 39 40 / 0.8);
+  --glass-border: rgb(31 169 189 / 0.18);
+  --shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -14px rgb(0 0 0 / 0.7);
 }
 
 @layer base {
@@ -236,6 +267,33 @@
 /* UST brand: eyebrows are the only text set in all caps. Use `className="eyebrow"`. */
 @utility eyebrow {
   @apply text-xs font-bold tracking-wider text-eyebrow uppercase;
+}
+
+/* Look: the canvas behind the map, a faint grid of dots. */
+@utility bg-dot-grid {
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+
+/* Look: a card the canvas shows through a little. */
+@utility glass {
+  background-color: var(--glass);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow-elevated);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+
+/* Look: what is active right now (teal), and what the AI is doing right now (violet). */
+@utility glow {
+  box-shadow:
+    0 0 0 1px var(--glow-ring),
+    0 0 18px 2px var(--glow);
+}
+
+@utility ai-glow {
+  box-shadow:
+    0 0 0 1px var(--ai-glow-ring),
+    0 0 20px 3px var(--ai-glow);
 }
 
 /*
