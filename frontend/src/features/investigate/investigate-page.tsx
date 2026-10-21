@@ -214,6 +214,22 @@ function Legend() {
       text: 'root cause',
     },
     { swatch: <span className="size-2.5 rounded-full bg-primary" />, text: 'ping in flight' },
+    {
+      swatch: (
+        <span className="flex size-3.5 items-center justify-center rounded-full bg-primary font-mono text-[9px] font-semibold text-primary-foreground">
+          1
+        </span>
+      ),
+      text: 'hop on the path',
+    },
+    {
+      swatch: (
+        <span className="flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-provenance-ai px-0.5 font-mono text-[9px] font-semibold text-white">
+          1
+        </span>
+      ),
+      text: 'order the AI went to the devices',
+    },
   ]
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">

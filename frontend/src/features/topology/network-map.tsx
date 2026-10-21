@@ -5,6 +5,7 @@
 // Colour is never the only signal: states also have icons, labels and line styles.
 
 import { CircleCheck, CircleX, Loader2, TriangleAlert } from 'lucide-react'
+import { motion } from 'motion/react'
 import type { CSSProperties } from 'react'
 import type { GraphDevice, GraphLink, Topology } from '@/api'
 import { DeviceGlyph } from '@/components/device-glyph'
@@ -82,6 +83,12 @@ function LinkLine({
     y: start.y + (end.y - start.y) * t,
   })
   const evidence = highlight.faultEvidence.length ? ` · ${highlight.faultEvidence.join(', ')}` : ''
+  // The way traffic goes on this hop: from path[hop] to path[hop + 1].
+  const forward = inPath && highlight.path[hop] === link.a
+  const [from, to] = forward ? [start, end] : [end, start]
+  const flowing = inPath && !fault && !down
+  // The hop number sits just left of the subnet label (any link is long enough for that).
+  const hopAt = { x: mid.x - label.length * 3.4 - 7 - 12, y: mid.y }
 
   return (
     <g
@@ -144,6 +151,31 @@ function LinkLine({
               : 'stroke-muted-foreground/40',
         )}
       />
+      {flowing && (
+        // Once the hop is drawn, dashes flow along it the way the traffic goes.
+        <line
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          strokeWidth={1.5}
+          style={{ '--delay': `${hop * 350 + 600}ms` } as CSSProperties}
+          className="flow-dash stroke-card/90"
+        />
+      )}
+      {flowing && (
+        // Which hop of the path this is, counted from the source.
+        <g aria-hidden="true" transform={`translate(${hopAt.x}, ${hopAt.y})`}>
+          <circle r={8} className="fill-primary stroke-card" strokeWidth={1.5} />
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            className="fill-primary-foreground font-mono text-[9.5px] font-semibold"
+          >
+            {hop + 1}
+          </text>
+        </g>
+      )}
       <g transform={`translate(${mid.x}, ${mid.y})`}>
         <rect
           x={-label.length * 3.4 - 7}
@@ -362,15 +394,21 @@ function DeviceBox({
   )
 }
 
-/** A packet travelling the ping's route while it runs (its result is then shown in a box). */
+/**
+ * A packet travelling the ping's route while it runs (its result is then shown in a box). When the
+ * answer has just come in (`fresh`), the packet plays it once: out and back for a reply; out and
+ * fading away for no reply (a ping does not say where the packet was lost).
+ */
 function PingPacket({
   ping,
   positions,
   reducedMotion,
+  fresh,
 }: {
   ping: MapPing
   positions: Map<string, Point>
   reducedMotion: boolean
+  fresh: boolean
 }) {
   const points = ping.route.map((name) => positions.get(name)).filter((p): p is Point => !!p)
   if (points.length === 0) return null
@@ -395,7 +433,28 @@ function PingPacket({
       </g>
     )
   }
-  return null
+  if (!fresh || reducedMotion || points.length < 2) return null
+  const there = ping.ok ? [...points, ...points.slice(0, -1).reverse()] : points
+  return (
+    <motion.circle
+      aria-hidden="true"
+      r={6}
+      initial={{ cx: points[0].x, cy: points[0].y, opacity: 1 }}
+      animate={{
+        cx: there.map((p) => p.x),
+        cy: there.map((p) => p.y),
+        opacity: ping.ok
+          ? [...there.slice(1).map(() => 1), 0]
+          : there.map((_, i, all) => 1 - i / all.length),
+      }}
+      transition={{ duration: 0.45 * there.length, ease: 'linear' }}
+      className={
+        ping.ok
+          ? 'fill-status-healthy stroke-card stroke-2'
+          : 'fill-status-critical stroke-card stroke-2'
+      }
+    />
+  )
 }
 
 export function NetworkMap({
@@ -432,6 +491,8 @@ export function NetworkMap({
   // The latest answered ping is written in a device box: in the target's box when it replied, in
   // the sender's box when it did not (a ping alone does not tell where the packet was lost).
   const answered = highlight.pings.filter((p) => p.ok !== null).at(-1)
+  // Only the latest answer plays, and only while the investigation runs (not when it is reopened).
+  const freshPing = agent && agent.mode !== 'resting' ? answered?.key : undefined
   const note: PingNote | null = answered
     ? {
         device: answered.ok ? answered.route[answered.route.length - 1] : answered.from,
@@ -548,6 +609,7 @@ export function NetworkMap({
             ping={ping}
             positions={positions}
             reducedMotion={reducedMotion}
+            fresh={ping.key === freshPing}
           />
         ))}
         {agent && <AgentLayer walk={agent} positions={positions} links={topology.links} />}

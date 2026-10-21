@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { RunEvent, Topology } from '@/api'
-import { boxIssue } from '@/features/topology/highlight'
+import { boxIssue, type AgentWalk } from '@/features/topology/highlight'
 import { NetworkMap } from '@/features/topology/network-map'
 import { deriveInvestigation, touchesNetwork } from './derive'
 import { NowBanner } from './now-banner'
@@ -119,6 +119,51 @@ it('writes the latest ping result in the box of the device that replied', () => 
     'aria-label',
     'CORE-SW-MAA, core, checked, healthy, ✓ 192.168.200.10 replied',
   )
+})
+
+describe('the path and the pings in motion', () => {
+  const hopNumbers = (map: HTMLElement) =>
+    [...map.querySelectorAll('g[aria-hidden] > circle.fill-primary + text')].map(
+      (t) => t.textContent,
+    )
+
+  it('numbers the hops of the path and lets traffic flow along them', () => {
+    const view = at((e) => e.type === 'tool_result' && e.id === 'E3') // the path is known
+    const { container } = render(
+      <NetworkMap topology={TOPOLOGY} highlight={view.highlight} showEdges={false} />,
+    )
+    expect(hopNumbers(container)).toEqual(['1', '2', '3'])
+    expect(container.querySelectorAll('.flow-dash')).toHaveLength(3)
+  })
+
+  it('stops the flow on the link the diagnosis blames', () => {
+    const view = deriveInvestigation(events, NAMES)
+    const { container } = render(
+      <NetworkMap topology={TOPOLOGY} highlight={view.highlight} showEdges={false} />,
+    )
+    expect(hopNumbers(container)).toEqual(['1', '3'])
+    expect(container.querySelectorAll('.flow-dash')).toHaveLength(2)
+  })
+
+  it('plays a ping answer once while the investigation runs, never when it is reopened', () => {
+    const view = deriveInvestigation(recorded('healthy-baseline'), NAMES)
+    const thinking: AgentWalk = { trail: [], at: null, mode: 'thinking', console: null }
+    const live = render(
+      <NetworkMap
+        topology={TOPOLOGY}
+        highlight={view.highlight}
+        agent={thinking}
+        showEdges={false}
+      />,
+    )
+    expect(live.container.querySelector('circle.fill-status-healthy')).not.toBeNull()
+    live.unmount()
+
+    const reopened = render(
+      <NetworkMap topology={TOPOLOGY} highlight={view.highlight} showEdges={false} />,
+    )
+    expect(reopened.container.querySelector('circle.fill-status-healthy')).toBeNull()
+  })
 })
 
 it('shortens problems to fit a device box', () => {

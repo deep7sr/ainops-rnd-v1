@@ -323,6 +323,21 @@
   }
 }
 
+/* Live map: once a hop of the path is drawn, dashes flow along it the way the traffic goes. */
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@utility flow-dash {
+  stroke-dasharray: 3 9;
+  animation: flow-dash 900ms linear var(--delay, 0ms) infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @utility path-draw {
   stroke-dasharray: var(--len);
   animation: path-draw 600ms ease-out var(--delay, 0ms) both;
