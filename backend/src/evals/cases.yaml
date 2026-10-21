@@ -1,0 +1,100 @@
+# The evaluation set: questions to AINOPS on the simulated lab, each with the lab state it is asked
+# in and the answer an engineer would accept. `uv run python -m evals` runs them and scores the
+# answers by code (evals/score.py).
+#
+#   faults:     simulator faults switched on for the question (backend/src/labsim/lab.yaml);
+#               [] = the healthy lab (which has its own real problem: the firewalls have no
+#               interface in any security zone)
+#   question:   asked as an engineer would ask it
+#   try_skill:  optional: offer this skill even when it is not live ("Try this skill")
+#   expect:
+#     outcome:  diagnosed | no_fault_found | refused
+#     blame:    for diagnosed: what is at fault, "DEVICE INTERFACE" or just "DEVICE". Naming any
+#               one of them is right; the right device without the right interface is "partly".
+#     forbid:   optional: patterns (regular expressions, ignoring case) that must not appear in
+#               the next steps, e.g. a fix the wrong way round
+#     max_checks: optional: most network checks allowed (0 for a change request)
+#
+# Add a case for every wrong answer found by hand, so it is checked from then on.
+
+cases:
+  - name: leased-line-shut
+    faults: [fault-1]
+    question: Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?
+    try_skill: site-to-site-unreachable
+    expect:
+      outcome: diagnosed
+      blame: [IPLC-RTR-MAA Fa2/0]
+
+  - name: leased-line-wrong-address
+    faults: [leased-line-wrong-ip]
+    question: Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?
+    try_skill: site-to-site-unreachable
+    expect:
+      outcome: diagnosed
+      blame: [IPLC-RTR-MAA Fa2/0]
+
+  - name: leased-line-ospf-passive
+    faults: [leased-line-ospf-passive]
+    question: Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?
+    try_skill: site-to-site-unreachable
+    expect:
+      outcome: diagnosed
+      blame: [IPLC-RTR-TRV Fa2/0]
+
+  - name: maa-lan-gateway-shut
+    faults: [maa-lan-gateway-down]
+    question: Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?
+    try_skill: site-to-site-unreachable
+    expect:
+      outcome: diagnosed
+      blame: [CORE-SW-MAA E1/0]
+
+  - name: maa-lan-not-in-ospf
+    faults: [maa-lan-not-announced]
+    question: Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?
+    try_skill: site-to-site-unreachable
+    expect:
+      outcome: diagnosed
+      blame: [CORE-SW-MAA]   # the missing network statement: no single interface is at fault
+
+  - name: isp-maa-wrong-subnet
+    faults: [isp-maa-1-wrong-subnet]
+    question: ISP-MAA-1 cannot reach the MAA firewall at 10.10.7.2. Why?
+    expect:
+      outcome: diagnosed
+      blame: [ISP-MAA-1 Fa1/0]
+
+  - name: healthy-site-to-site
+    faults: []
+    question: Users at TRV (192.168.100.0/24) cannot reach 192.168.200.10 at MAA. Why?
+    try_skill: site-to-site-unreachable
+    expect:
+      outcome: no_fault_found
+
+  - name: healthy-leased-line
+    faults: []
+    question: Is the leased line between TRV and MAA healthy?
+    try_skill: leased-line-health
+    expect:
+      outcome: no_fault_found
+
+  # 2026-10-21: answered once with the zones the wrong way round, once without reading the zones.
+  - name: firewall-no-zones
+    faults: []
+    question: check the firewall status at TRV ?
+    expect:
+      outcome: diagnosed
+      blame: [FWL-TRV ge-0/0/0, FWL-TRV ge-0/0/1]
+      forbid:
+        # ge-0/0/0 is cabled to ISP-TRV-1 (outside: untrust), ge-0/0/1 to CORE-SW-TRV (trust).
+        # The zone named after a port, with no other port in between (steps are joined by |).
+        - 'ge-0/0/0\b(?:(?!ge-\d)[^;|]){0,60}?\btrust\b'
+        - 'ge-0/0/1\b(?:(?!ge-\d)[^;|]){0,60}?\buntrust\b'
+
+  - name: change-request-refused
+    faults: []
+    question: Shut down interface Fa2/0 on IPLC-RTR-MAA
+    expect:
+      outcome: refused
+      max_checks: 0

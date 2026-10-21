@@ -4,6 +4,45 @@ You are continuing work with Deependra (the user) on AINOPS, an agentic network-
 platform. Read this whole note before doing anything. Then confirm the state with
 `git log --oneline -10`, `git status` and `git stash list`, and wait for the user's direction.
 
+## Update 2026-10-20: new machine, no EVE-NG lab, simulated lab
+- Work moved to a corporate laptop (repo `C:\c\dev\ainops-platform`); the lab laptop with EVE-NG
+  is away for repair. Setup steps (Zscaler proxy workarounds) in `backend/README.md`, "Set up a
+  new machine". gitleaks is not installed yet (GitHub downloads blocked): commits wait for it.
+- **Simulated lab** `backend/src/labsim` (see `backend/README.md`, "Simulated lab"): telnet
+  consoles on the EVE ports, worked out from a model of the lab and named faults.
+  `scripts\start-all.ps1 -Sim` runs AINOPS on it; the UI says "Lab · simulated devices".
+  Checked against every live recording; Junos beyond routes/interfaces/zones is unverified.
+- Found with it: `parsers.routing_protocols` reads every word after "Passive Interface(s):" as an
+  interface name (never seen on the lab: it has no passive interfaces). Not fixed yet.
+- Open: cases made while on the simulator go into the same Neo4j as real ones.
+- 2026-10-21: AI calls work from this laptop with the user variable `SSL_CERT_FILE` (step 3 of
+  "Set up a new machine"). Azure answers 403 (its firewall does not allow the UST network), so
+  only the Groq key works here, and it is the free tier (8,000 tokens/min).
+- 2026-10-21, first run on the simulator (fault-1, checklist step 1, gpt-oss-120b, "Try this
+  skill" site-to-site-unreachable): 15 checks (9 beyond the skill), 8 min 55 s (the free tier's
+  token limit spaces the AI calls 30-60 s apart), 85,887 input + 3,083 output tokens. It found
+  "MISSING IPLC-RTR-MAA on Fa2/0" on both IPLC routers but blamed CORE-SW-TRV (said it lacks
+  OSPF for 10.10.4.0/24: it mixed up IPLC-RTR-TRV's Fa2/0 with CORE-SW-TRV's), with "high"
+  confidence; it never checked IPLC-RTR-MAA's interfaces. Case `case-7fd965ec` is pending with
+  that wrong root cause: reject or correct it, never approve it.
+- 2026-10-21, confidence rule (uncommitted, `agent/report.py`): a diagnosis is "low" when no
+  cited root-cause check of the blamed device names the blamed interface ("nothing cited for
+  the root cause shows X: check it directly"). Replayed on the 22 saved reports: only the run
+  above (high -> low) and inv-e0df4b94 (cited only "2 links", medium -> low) change. Open: one
+  shown item is enough, so a long list of blamed items (inv-d49e1fb5) stays high; a diagnosis
+  with an empty `affected` is not checked.
+- 2026-10-21, also uncommitted: a root cause nothing cited shows is sent back once to be checked
+  (runner.py, "recheck" step in the UI); get_firewall_zones names each port's cable (graph);
+  prompt rules on blaming and on direction fixes. Then an audit of everything a diagnosis
+  depends on: **`docs/diagnosis-audit.md`** (findings A1-E4, suggested order). Live re-runs:
+  the firewall question came back "answered / high" without reading the zones (finding C1);
+  fault-1 died on the free tier (413, 8,069 > 8,000 tokens/min at check 15).
+- 2026-10-21, also uncommitted: **evaluation set** `backend/src/evals` (`uv run python -m evals`,
+  backend/README.md "Evaluation set"): 10 cases in `cases.yaml`, scored by code, refuses the live
+  lab, restores faults. Only the plumbing was run: its first case found finding C6 (null list ->
+  Groq 400), then the free tier's daily cap (200,000 tokens) stopped it. A full pass needs the
+  Groq Dev tier or Azure.
+
 ## Working agreement (the user's rules: follow them exactly)
 - For every task, propose a short plan and WAIT for "yes" before writing code. If the plan has to
   change while building (e.g. for safety), say so plainly in the result.
@@ -120,7 +159,7 @@ platform. Read this whole note before doing anything. Then confirm the state wit
   check: NetBrain/Kentik/Azure SRE Agent author runbooks in the UI; we keep SKILL.md files.
 
 ## How to run (Windows; Git Bash for tools, PowerShell for the user)
-- User: `cd C:\dev\ainops-platform` then
+- User: `cd C:\c\dev\ainops-platform` then
   `powershell -ExecutionPolicy Bypass -File .\scripts\start-all.ps1`.
   Pieces can be restarted individually:
   - `cd backend; uv run python -m ainops mcp-network`
@@ -221,6 +260,6 @@ platform. Read this whole note before doing anything. Then confirm the state wit
 - Scale items are listed in `docs/production-readiness.md`, not here.
 
 ## Memory
-`C:\Users\Praveen\.claude\projects\c--dev-ainops-platform\memory\` has `agentic-redesign.md`
+`C:\Users\291223\.claude\projects\C--c-dev-ainops-platform\memory\` has `agentic-redesign.md`
 (running state), `praveen-meeting-2026-10-06.md`, `windows-dev-quirks.md` and others. Keep them
 updated.
