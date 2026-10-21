@@ -31,11 +31,32 @@ from ainops.network.executor import (
 )
 from ainops.network.guard import CommandRefusedError
 from ainops.network.health import Health, Issue
+from ainops.network.redact import redact
 
 COMMANDS_FILE = Path(__file__).with_name("commands.yaml")
 
 _INTERFACE = re.compile(r"^[A-Za-z]{1,20}-?\d{1,3}(?:/\d{1,3}){0,3}(?:\.\d{1,5})?$")
 _RAW_EXCERPT = 2500
+# The console in the UI shows the first lines of what the device answered.
+_EXCERPT_LINES = 12
+_EXCERPT_WIDTH = 120
+
+# The commands.yaml entry each tool runs (trace_route runs `routes` on every device it walks).
+TOOL_COMMANDS = {
+    "get_device_facts": "facts",
+    "get_interfaces": "interfaces",
+    "get_interface_detail": "interface_detail",
+    "get_routes": "routes",
+    "trace_route": "routes",
+    "get_ospf_neighbors": "ospf_neighbors",
+    "get_routing_protocols": "routing_protocols",
+    "get_neighbors": "neighbors",
+    "get_arp_table": "arp",
+    "get_logs": "logs",
+    "ping": "ping",
+    "get_firewall_policies": "firewall_policies",
+    "get_firewall_zones": "firewall_zones",
+}
 
 
 class ToolFailure(Exception):
@@ -49,6 +70,9 @@ class Evidence(BaseModel):
     source: str  # "live": from the device now (only tests replay recorded outputs)
     collected_at: str
     duration_ms: int
+    # The first lines of the device's answer, redacted, for the console in the UI. Never sent to
+    # the LLM: the agent drops `evidence` before the AI reads a result (runner._compact).
+    excerpt: list[str] = []
 
 
 class ToolResult(BaseModel):
@@ -72,6 +96,39 @@ class TraceResult(BaseModel):
     data: dict[str, Any]
     health: Health
     evidence: Evidence
+
+
+def output_excerpt(text: str) -> list[str]:
+    """Up to 12 lines of a device's answer, for the console in the UI.
+
+    A long answer is mostly detail under a few headings, so the lines that start a block (an
+    interface, a route, a neighbour: not indented) come first, then the others, always in their
+    original order, with "…" where lines were left out. Redacted again here (redaction is
+    idempotent), so the excerpt is safe whichever executor produced the text.
+    """
+    rows = [line.rstrip()[:_EXCERPT_WIDTH] for line in redact(text).splitlines() if line.strip()]
+    if len(rows) <= _EXCERPT_LINES:
+        return rows
+    headings = [i for i, row in enumerate(rows) if not row[0].isspace()]
+    details = [i for i, row in enumerate(rows) if row[0].isspace()]
+    keep = sorted((headings + details)[:_EXCERPT_LINES])
+    lines: list[str] = []
+    for position, index in enumerate(keep):
+        previous = keep[position - 1] if position else -1
+        if index != previous + 1:
+            lines.append("…")
+        lines.append(rows[index])
+    if keep[-1] != len(rows) - 1:
+        lines.append("…")
+    return lines
+
+
+def command_catalog(commands: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """Per platform, the command template each tool runs: what the UI shows when a call starts."""
+    return {
+        platform: {tool: table[key] for tool, key in TOOL_COMMANDS.items() if key in table}
+        for platform, table in commands.items()
+    }
 
 
 def load_commands(path: Path = COMMANDS_FILE) -> dict[str, dict[str, str]]:
@@ -123,7 +180,6 @@ class NetworkService:
         self,
         tool: str,
         device_name: str,
-        key: str,
         parse: Callable[[Device, RawOutput], tuple[Any, str]],
         *,
         args: dict[str, str] | None = None,
@@ -136,7 +192,7 @@ class NetworkService:
         command = ""
         try:
             device = self._device(device_name)
-            template = self.commands.get(device.platform, {}).get(key)
+            template = self.commands.get(device.platform, {}).get(TOOL_COMMANDS[tool])
             if template is None:
                 raise ToolFailure(
                     f"{tool} is not supported on {device.name} ({device.platform}, {device.role})"
@@ -171,6 +227,7 @@ class NetworkService:
                     source=raw.source,
                     collected_at=datetime.now(UTC).isoformat(timespec="seconds"),
                     duration_ms=raw.duration_ms,
+                    excerpt=output_excerpt(raw.text),
                 ),
                 note=note,
             )
@@ -216,7 +273,7 @@ class NetworkService:
                 summary += f", up {facts['uptime']}"
             return facts, summary
 
-        return self._run("get_device_facts", device, "facts", parse)
+        return self._run("get_device_facts", device, parse)
 
     def get_interfaces(self, device: str) -> ToolResult:
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
@@ -230,7 +287,7 @@ class NetworkService:
             )
             return rows, summary
 
-        return self._run("get_interfaces", device, "interfaces", parse, assess=health.interfaces)
+        return self._run("get_interfaces", device, parse, assess=health.interfaces)
 
     def _audit_invalid(
         self, tool: str, device: str, args: dict[str, str], error: Exception
@@ -262,7 +319,6 @@ class NetworkService:
         return self._run(
             "get_interface_detail",
             device,
-            "interface_detail",
             parse,
             args={"interface": name},
             assess=lambda detail: health.interface_detail(detail, name),
@@ -295,7 +351,7 @@ class NetworkService:
                 return health.INFO
             return health.routes_to(target, data["routes"])
 
-        return self._run("get_routes", device, "routes", parse, assess=assess)
+        return self._run("get_routes", device, parse, assess=assess)
 
     def _expected_ospf(self, device: str) -> tuple[list[dict[str, Any]], str]:
         """The neighbours the device normally has, and a note when they could not be read."""
@@ -338,7 +394,6 @@ class NetworkService:
         return self._run(
             "get_ospf_neighbors",
             device,
-            "ospf_neighbors",
             parse,
             assess=lambda rows: health.ospf_neighbors(rows, expected),
             tolerate_device_error=not_running,
@@ -353,7 +408,7 @@ class NetworkService:
                 summary += f"; OSPF networks: {nets}"
             return info, summary
 
-        return self._run("get_routing_protocols", device, "routing_protocols", parse)
+        return self._run("get_routing_protocols", device, parse)
 
     def get_neighbors(self, device: str) -> ToolResult:
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
@@ -366,16 +421,14 @@ class NetworkService:
                 return [], "neighbour discovery (LLDP) is not enabled on this device"
             return None
 
-        return self._run(
-            "get_neighbors", device, "neighbors", parse, tolerate_device_error=lldp_off
-        )
+        return self._run("get_neighbors", device, parse, tolerate_device_error=lldp_off)
 
     def get_arp_table(self, device: str) -> ToolResult:
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
             rows = parsers.arp(d.platform, raw.text)
             return rows, f"{len(rows)} ARP entries"
 
-        return self._run("get_arp_table", device, "arp", parse)
+        return self._run("get_arp_table", device, parse)
 
     def get_logs(self, device: str, lines: int = 30) -> ToolResult:
         limit = max(5, min(int(lines), 60))
@@ -384,7 +437,7 @@ class NetworkService:
             entries = parsers.logs(d.platform, raw.text, limit)
             return entries, f"last {len(entries)} log messages" if entries else "no log messages"
 
-        return self._run("get_logs", device, "logs", parse)
+        return self._run("get_logs", device, parse)
 
     def ping(self, device: str, destination: str) -> ToolResult:
         try:
@@ -407,9 +460,7 @@ class NetworkService:
                 f"({result['success_percent']}%){rtt}{arp}"
             )
 
-        return self._run(
-            "ping", device, "ping", parse, args={"destination": target}, assess=health.ping
-        )
+        return self._run("ping", device, parse, args={"destination": target}, assess=health.ping)
 
     def get_firewall_policies(self, device: str) -> ToolResult:
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
@@ -419,7 +470,7 @@ class NetworkService:
             summary += f"; deny/reject: {', '.join(denies)}" if denies else "; none deny traffic"
             return rows, summary
 
-        return self._run("get_firewall_policies", device, "firewall_policies", parse)
+        return self._run("get_firewall_policies", device, parse)
 
     def _firewall_interfaces(self, device: str) -> tuple[list[dict[str, Any]] | None, str]:
         """The firewall's interfaces, to find addressed ones in no zone (None: not checked)."""
@@ -479,7 +530,6 @@ class NetworkService:
         return self._run(
             "get_firewall_zones",
             device,
-            "firewall_zones",
             parse,
             assess=lambda rows: health.firewall_zones(rows, interfaces, faces),
         )

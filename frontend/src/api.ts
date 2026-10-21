@@ -31,6 +31,7 @@ export const api = {
   health: () => request<Health>('/api/health'),
   topology: () => request<Topology>('/api/topology'),
   tools: () => request<ToolCatalog>('/api/tools'),
+  commands: () => request<CommandCatalog>('/api/commands'),
   callTool: (server: string, tool: string, args: Record<string, unknown>) =>
     request<ToolCallResult>(`/api/tools/${server}/${tool}`, {
       method: 'POST',
@@ -445,7 +446,13 @@ export interface Evidence {
   source: 'live' | 'replay'
   collected_at: string
   duration_ms: number
+  /** The first lines of the device's answer, redacted, for the console (never shown to the AI).
+   *  "…" marks lines left out. Missing in investigations saved before 2026-10-21. */
+  excerpt?: string[]
 }
+
+/** Per platform, the command template each network tool runs (backend /api/commands). */
+export type CommandCatalog = Record<string, Record<string, string>>
 
 /** Verdict on a tool result, worked out by code from the parsed data (backend network/health.py). */
 export interface HealthIssue {

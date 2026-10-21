@@ -43,6 +43,7 @@ from ainops.inventory_edit import (
 )
 from ainops.inventory_view import device_detail, inventory_rows
 from ainops.network.audit import AuditLog
+from ainops.network.service import command_catalog, load_commands
 from ainops.similar import Hints, clues_of, similar_cases
 from ainops.skill_book import SkillConflict, SkillError, SkillForm, SkillSave
 from ainops.skill_usage import SkillUsage, skill_usage
@@ -137,6 +138,13 @@ async def tools() -> dict[str, Any]:
         except Exception as error:  # noqa: BLE001
             servers[name] = {"url": url, "ok": False, "error": type(error).__name__, "tools": []}
     return {"servers": servers}
+
+
+@app.get("/api/commands")
+def commands() -> dict[str, dict[str, str]]:
+    """Per platform, the command each network tool runs (from the reviewed commands.yaml), so the UI
+    can show it as soon as a call starts. Templates only: nothing from a device."""
+    return command_catalog(load_commands())
 
 
 class ToolCall(BaseModel):

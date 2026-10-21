@@ -218,12 +218,14 @@ class AinopsMiddleware(AgentMiddleware):
             return result
 
         text = _text(result.content)
-        run.known_ips.update(_IPV4.findall(text))
         payload: Any
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
             payload = None
+        # Addresses the AI may use later: only from what it reads, never from the console excerpt
+        # that only the UI shows.
+        run.known_ips.update(_IPV4.findall(text if payload is None else _without_excerpt(payload)))
         failed = result.status == "error" or payload is None
         device = payload.get("device") if isinstance(payload, dict) else args.get("device")
         # Only a device NAME goes on: find_device returns a whole device record under "device".
@@ -311,6 +313,13 @@ class AinopsMiddleware(AgentMiddleware):
             }  # fmt: skip
         )
         return ToolMessage(content=instructions(skill), tool_call_id=call_id, name=USE_SKILL)
+
+
+def _without_excerpt(payload: Any) -> str:
+    evidence = payload.get("evidence") if isinstance(payload, dict) else None
+    if isinstance(evidence, dict) and "excerpt" in evidence:
+        payload = {**payload, "evidence": {k: v for k, v in evidence.items() if k != "excerpt"}}
+    return json.dumps(payload, default=str)
 
 
 def _compact(payload: Any) -> str:
