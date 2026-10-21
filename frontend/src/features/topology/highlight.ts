@@ -1,6 +1,8 @@
 // What the map highlights while an investigation runs (see network-map.tsx). Everything here comes
 // from real events of the run: nothing moves or changes colour unless the agent did something.
 
+import type { GraphLink } from '@/api'
+
 /**
  * - checking:    a tool is running on the device right now
  * - ok:          checked, and the code-computed verdict says healthy
@@ -96,4 +98,21 @@ export function boxIssue(text: string): string {
   if (noRoute) return `no route to ${noRoute[1]}`
   const down = /^(\S+) is down$/.exec(text)
   return down ? `${down[1]} down` : text
+}
+
+/**
+ * What the map frames when the diagnosis names a fault: the blamed devices, and for a blamed
+ * interface also the device at the other end of its link (a broken link is seen from both ends).
+ */
+export function faultFrame(highlight: MapHighlight, links: GraphLink[]): string[] {
+  const frame = new Set(highlight.faultDevices)
+  for (const link of links) {
+    const a = highlight.faultInterfaces.has(`${link.a}:${link.a_interface}`)
+    const b = highlight.faultInterfaces.has(`${link.b}:${link.b_interface}`)
+    if (a || b) {
+      frame.add(link.a)
+      frame.add(link.b)
+    }
+  }
+  return [...frame]
 }

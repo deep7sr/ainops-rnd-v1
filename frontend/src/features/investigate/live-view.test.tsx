@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { RunEvent, Topology } from '@/api'
-import { boxIssue, type AgentWalk } from '@/features/topology/highlight'
+import { boxIssue, faultFrame, type AgentWalk } from '@/features/topology/highlight'
+import { frameView, NODE_WIDTH } from '@/features/topology/layout'
 import { NetworkMap } from '@/features/topology/network-map'
 import { deriveInvestigation, touchesNetwork } from './derive'
 import { NowBanner } from './now-banner'
@@ -172,6 +173,80 @@ describe('the path and the pings in motion', () => {
     )
     expect(reopened.container.querySelector('circle.fill-status-healthy')).toBeNull()
   })
+})
+
+describe('the root-cause reveal', () => {
+  const view = deriveInvestigation(events, NAMES)
+  const viewBox = (map: HTMLElement) =>
+    (map.querySelector('svg[aria-label="Network map"]')?.getAttribute('viewBox') ?? '')
+      .split(' ')
+      .map(Number)
+
+  it('frames the blamed device and the other end of its blamed link', () => {
+    expect(faultFrame(view.highlight, TOPOLOGY.links).sort()).toEqual([
+      'IPLC-RTR-MAA',
+      'IPLC-RTR-TRV',
+    ])
+    expect(
+      faultFrame(at((e) => e.type === 'tool_result' && e.id === 'E6').highlight, TOPOLOGY.links),
+    ).toEqual([])
+  })
+
+  it('a blamed interface brings both ends of its link into the frame', () => {
+    const onlyInterface = (blamed: string) => ({
+      ...view.highlight,
+      faultDevices: new Set<string>(),
+      faultInterfaces: new Set([blamed]),
+    })
+    const both = ['IPLC-RTR-MAA', 'IPLC-RTR-TRV']
+    expect(faultFrame(onlyInterface('IPLC-RTR-TRV:Fa2/0'), TOPOLOGY.links).sort()).toEqual(both)
+    expect(faultFrame(onlyInterface('IPLC-RTR-MAA:Fa2/0'), TOPOLOGY.links).sort()).toEqual(both)
+  })
+
+  it('zooms the map to the fault, keeping its proportions', () => {
+    const whole = viewBox(
+      render(<NetworkMap topology={TOPOLOGY} highlight={view.highlight} showEdges={false} />)
+        .container,
+    )
+    const zoomed = viewBox(
+      render(
+        <NetworkMap
+          topology={TOPOLOGY}
+          highlight={view.highlight}
+          focus={faultFrame(view.highlight, TOPOLOGY.links)}
+          showEdges={false}
+        />,
+      ).container,
+    )
+    expect(zoomed[2]).toBeLessThan(whole[2])
+    expect(zoomed[2] / zoomed[3]).toBeCloseTo(whole[2] / whole[3], 5)
+    // Inside the whole map.
+    expect(zoomed[0]).toBeGreaterThanOrEqual(whole[0])
+    expect(zoomed[0] + zoomed[2]).toBeLessThanOrEqual(whole[0] + whole[2] + 1e-6)
+  })
+
+  it('marks where the blamed link breaks', () => {
+    const { container } = render(
+      <NetworkMap topology={TOPOLOGY} highlight={view.highlight} showEdges={false} />,
+    )
+    expect(
+      container.querySelectorAll('circle.animate-ping.fill-status-critical\\/40'),
+    ).toHaveLength(1)
+  })
+})
+
+it('frames nothing narrower than the boxes, and never more than the whole map', () => {
+  const whole = { x: 0, y: 0, width: 1000, height: 560 }
+  expect(frameView(whole, [])).toEqual(whole)
+  expect(
+    frameView(whole, [
+      { x: 10, y: 10 },
+      { x: 990, y: 550 },
+    ]),
+  ).toEqual(whole)
+  const one = frameView(whole, [{ x: 500, y: 300 }])
+  expect(one.width).toBeGreaterThan(NODE_WIDTH)
+  expect(one.width / one.height).toBeCloseTo(1000 / 560, 5)
 })
 
 it('shortens problems to fit a device box', () => {

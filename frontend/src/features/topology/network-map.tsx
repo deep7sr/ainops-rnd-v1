@@ -23,6 +23,7 @@ import {
 import {
   edgeInterfaces,
   edgePoint,
+  frameView,
   layoutDevices,
   linkIsDown,
   NODE_HEIGHT,
@@ -217,6 +218,31 @@ function LinkLine({
             {text}
           </text>
         ))}
+      {fault && (
+        // Where the link breaks: a pulsing mark at the blamed end (both ends if both are blamed).
+        <g aria-hidden="true">
+          {[
+            { p: at(0.16), blamed: highlight.faultInterfaces.has(`${link.a}:${link.a_interface}`) },
+            { p: at(0.84), blamed: highlight.faultInterfaces.has(`${link.b}:${link.b_interface}`) },
+          ]
+            .filter(({ blamed }) => blamed)
+            .map(({ p }, index) => (
+              <g key={index} transform={`translate(${p.x}, ${p.y})`}>
+                <circle
+                  r={9}
+                  className="origin-center animate-ping fill-status-critical/40 [animation-duration:1.4s] [transform-box:fill-box] motion-reduce:hidden"
+                />
+                <circle r={8} className="fill-status-critical stroke-card" strokeWidth={1.5} />
+                <path
+                  d="M-3.5 -3.5l7 7M3.5 -3.5l-7 7"
+                  className="stroke-white"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+              </g>
+            ))}
+        </g>
+      )}
       {fault && (
         <text
           x={mid.x}
@@ -461,6 +487,7 @@ export function NetworkMap({
   topology,
   highlight = NO_HIGHLIGHT,
   selected = null,
+  focus = null,
   onSelect,
   showEdges = true,
   agent = null,
@@ -471,6 +498,8 @@ export function NetworkMap({
   /** The agent during a live investigation: its marker, trail and console. */
   agent?: AgentWalk | null
   selected?: string | null
+  /** Devices to zoom to (the root cause); null or empty: the whole map. */
+  focus?: string[] | null
   onSelect?: (key: string) => void
   showEdges?: boolean
   className?: string
@@ -487,7 +516,11 @@ export function NetworkMap({
   const zoom = !showEdges && xs.length > 0
   const viewLeft = zoom ? Math.max(0, Math.min(...xs) - NODE_WIDTH / 2 - 40) : 0
   const viewRight = zoom ? Math.min(VIEW_WIDTH, Math.max(...xs) + NODE_WIDTH / 2 + 40) : VIEW_WIDTH
-  const viewBox = `${viewLeft} 0 ${viewRight - viewLeft} ${VIEW_HEIGHT}`
+  const view = frameView(
+    { x: viewLeft, y: 0, width: viewRight - viewLeft, height: VIEW_HEIGHT },
+    (focus ?? []).map((name) => positions.get(name)).filter((p): p is Point => !!p),
+  )
+  const viewBox = `${view.x} ${view.y} ${view.width} ${view.height}`
   // The latest answered ping is written in a device box: in the target's box when it replied, in
   // the sender's box when it did not (a ping alone does not tell where the packet was lost).
   const answered = highlight.pings.filter((p) => p.ok !== null).at(-1)
@@ -505,8 +538,10 @@ export function NetworkMap({
 
   return (
     <div className="relative">
-      <svg
-        viewBox={viewBox}
+      <motion.svg
+        initial={false}
+        animate={{ viewBox }}
+        transition={{ duration: reducedMotion ? 0 : 0.9, ease: [0.65, 0, 0.35, 1] }}
         role="group"
         aria-label="Network map"
         className={cn('h-auto w-full select-none', className)}
@@ -613,7 +648,7 @@ export function NetworkMap({
           />
         ))}
         {agent && <AgentLayer walk={agent} positions={positions} links={topology.links} />}
-      </svg>
+      </motion.svg>
       {agent && (
         <AgentConsoleOverlay
           console={agent.console}

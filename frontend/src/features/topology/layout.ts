@@ -88,3 +88,37 @@ export function edgeInterfaces(devices: GraphDevice[], links: GraphLink[]) {
       .map((i) => ({ device: device.name, ...i })),
   )
 }
+
+/** A part of the map: what the camera shows. */
+export interface View {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * The part of `whole` that frames these points (device centres) with room around their boxes, in the
+ * same proportions as `whole` (so the map keeps its height) and never outside it. No points: whole.
+ */
+export function frameView(whole: View, points: Point[]): View {
+  if (points.length === 0) return whole
+  const xs = points.map((p) => p.x)
+  const ys = points.map((p) => p.y)
+  let x = Math.min(...xs) - NODE_WIDTH / 2 - 40
+  let y = Math.min(...ys) - NODE_HEIGHT / 2 - 60
+  let width = Math.max(...xs) - Math.min(...xs) + NODE_WIDTH + 80
+  let height = Math.max(...ys) - Math.min(...ys) + NODE_HEIGHT + 120
+  const aspect = whole.width / whole.height
+  if (width / height < aspect) {
+    x -= (height * aspect - width) / 2
+    width = height * aspect
+  } else {
+    y -= (width / aspect - height) / 2
+    height = width / aspect
+  }
+  if (width >= whole.width) return whole
+  x = Math.min(Math.max(x, whole.x), whole.x + whole.width - width)
+  y = Math.min(Math.max(y, whole.y), whole.y + whole.height - height)
+  return { x, y, width, height }
+}

@@ -4,6 +4,8 @@ import {
   ChevronDown,
   History,
   Loader2,
+  Focus,
+  Maximize2,
   Network,
   Plus,
   Router,
@@ -21,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { CaseSection } from '@/features/cases/case-section'
 import { skillTitle } from '@/features/skills/labels'
+import { faultFrame } from '@/features/topology/highlight'
 import { NetworkMap } from '@/features/topology/network-map'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { useRunEvents } from '@/hooks/use-run-events'
@@ -477,6 +480,15 @@ function Run({ runId }: { runId: string }) {
     [view.steps, running, platforms, commands.data],
   )
 
+  // When the diagnosis names a fault, the map zooms to it; the engineer can go back to it all.
+  const frame = useMemo(
+    () => faultFrame(view.highlight, topology.data?.links ?? []),
+    [view.highlight, topology.data],
+  )
+  const [wholeMap, setWholeMap] = useState(false)
+  const canZoom = !running && view.verdict !== null && frame.length > 0
+  const zoomed = canZoom && !wholeMap
+
   // Follow the live steps while the investigation runs.
   useEffect(() => {
     if (running) bottom.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -537,12 +549,28 @@ function Run({ runId }: { runId: string }) {
               nothing to show on it. It keeps everything checked in the whole conversation. */}
           {touchesNetwork(view.steps) && (
             <>
-              <div className="rounded-lg border bg-card bg-dot-grid p-2">
+              <div className="relative rounded-lg border bg-card bg-dot-grid p-2">
+                {canZoom && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWholeMap((whole) => !whole)}
+                    className="absolute top-3 right-3 z-20 h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {zoomed ? (
+                      <Maximize2 aria-hidden="true" className="size-3.5" />
+                    ) : (
+                      <Focus aria-hidden="true" className="size-3.5" />
+                    )}
+                    {zoomed ? 'Show whole map' : 'Zoom to the root cause'}
+                  </Button>
+                )}
                 {topology.data ? (
                   <NetworkMap
                     topology={topology.data}
                     highlight={view.highlight}
                     agent={walk}
+                    focus={zoomed ? frame : null}
                     showEdges={false}
                     selected={panelDevice}
                     onSelect={(key) => {
