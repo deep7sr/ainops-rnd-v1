@@ -233,6 +233,22 @@ describe('trace_route in the timeline', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows each device with its picture when its role is known', () => {
+    const view = deriveInvestigation([started, ...traced('E1', sample('healthy'))], NAMES)
+    const roles = new Map([
+      ['CORE-SW-TRV', 'core'],
+      ['IPLC-RTR-TRV', 'wan-router'],
+    ])
+    render(<Timeline steps={view.steps} focused={null} roles={roles} />)
+    const hops = screen.getByRole('list', { name: 'Route followed' })
+    const pictures = [...hops.querySelectorAll('[data-glyph]')].map((g) =>
+      g.getAttribute('data-glyph'),
+    )
+    expect(pictures).toEqual(['core', 'router']) // the hops with a known role, in route order
+    // Decorative: the name is next to it.
+    hops.querySelectorAll('[data-glyph]').forEach((g) => expect(g).toHaveAttribute('aria-hidden'))
+  })
+
   it('says where traffic stops when a route is missing', () => {
     const view = deriveInvestigation(
       [started, ...traced('E1', sample('fault1'), '192.168.100.0/24')],

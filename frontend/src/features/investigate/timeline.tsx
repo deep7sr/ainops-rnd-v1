@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { HintCase } from '@/api'
+import { DeviceGlyph } from '@/components/device-glyph'
 import { JsonView } from '@/components/json-view'
 import { SkillBadge } from '@/features/skills/skill-badges'
 import { StepText } from '@/features/skills/step-text'
@@ -178,15 +179,27 @@ function SkillStepTag({ step }: { step: number | null }) {
   )
 }
 
+/** A device named in a step: its picture (when its role is known) and its name. */
+function DeviceName({ name, role }: { name: string; role?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {role && <DeviceGlyph deviceRole={role} className="size-4 text-primary" />}
+      {name}
+    </span>
+  )
+}
+
 function StepItem({
   step,
   focused,
   last,
+  roles,
   onSelectDevice,
 }: {
   step: Step
   focused: boolean
   last: boolean
+  roles?: Map<string, string>
   onSelectDevice?: (device: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -252,10 +265,12 @@ function StepItem({
                 onClick={() => onSelectDevice(step.device as string)}
                 className="rounded font-medium text-foreground underline-offset-2 hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                {step.device}
+                <DeviceName name={step.device} role={roles?.get(step.device)} />
               </button>
             ) : (
-              <span className="font-medium text-foreground">{step.device}</span>
+              <span className="font-medium text-foreground">
+                <DeviceName name={step.device} role={roles?.get(step.device)} />
+              </span>
             ))}
           {details && <span className="font-mono">{details}</span>}
         </div>
@@ -305,7 +320,7 @@ function StepItem({
           </span>
         </div>
 
-        {trace && <TraceHops trace={trace} />}
+        {trace && <TraceHops trace={trace} roles={roles} />}
 
         {step.state !== 'running' &&
           step.kind === 'tool' &&
@@ -347,10 +362,13 @@ function StepItem({
 export function Timeline({
   steps,
   focused,
+  roles,
   onSelectDevice,
 }: {
   steps: Step[]
   focused: string | null
+  /** Each device's role, for its picture next to its name. */
+  roles?: Map<string, string>
   onSelectDevice?: (device: string) => void
 }) {
   return (
@@ -378,6 +396,7 @@ export function Timeline({
                 step={step}
                 focused={focused !== null && focused === step.evidenceId}
                 last={index === steps.length - 1}
+                roles={roles}
                 onSelectDevice={onSelectDevice}
               />
             )}

@@ -452,6 +452,10 @@ function Run({ runId }: { runId: string }) {
     () => new Map(topology.data?.devices.map((d) => [d.name, d.platform]) ?? []),
     [topology.data],
   )
+  const roles = useMemo(
+    () => new Map(topology.data?.devices.map((d) => [d.name, d.role]) ?? []),
+    [topology.data],
+  )
   const walk = useMemo(
     () => agentWalk(view.steps, running, platforms, commands.data),
     [view.steps, running, platforms, commands.data],
@@ -601,7 +605,12 @@ function Run({ runId }: { runId: string }) {
 
         {view.steps.length === 0 && running && <Skeleton className="h-16 w-full" />}
 
-        <Timeline steps={view.steps} focused={focused} onSelectDevice={setPanelDevice} />
+        <Timeline
+          steps={view.steps}
+          focused={focused}
+          roles={roles}
+          onSelectDevice={setPanelDevice}
+        />
 
         {running && view.steps.length > 0 && view.steps.every((s) => s.state !== 'running') && (
           <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">

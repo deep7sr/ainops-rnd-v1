@@ -1,11 +1,12 @@
 import { CircleCheck, CornerDownRight, TriangleAlert } from 'lucide-react'
+import { DeviceGlyph } from '@/components/device-glyph'
 import { cn } from '@/lib/utils'
 import { distanceText, endText, routeSource, type Trace } from './trace'
 
 // The routing tables the trace followed, one line per device: which route the device itself chose
 // for the destination and where it sends the traffic next.
 
-export function TraceHops({ trace }: { trace: Trace }) {
+export function TraceHops({ trace, roles }: { trace: Trace; roles?: Map<string, string> }) {
   const arrived = trace.status === 'reached'
   return (
     <div className="mt-2 rounded-md border bg-background/60 px-3 py-2 text-sm">
@@ -17,7 +18,15 @@ export function TraceHops({ trace }: { trace: Trace }) {
               {index + 1}
             </span>
             <div className="min-w-0">
-              <span className="font-medium">{hop.device}</span>
+              <span className="inline-flex items-center gap-1 font-medium">
+                {roles?.has(hop.device) && (
+                  <DeviceGlyph
+                    deviceRole={roles.get(hop.device) ?? ''}
+                    className="size-4 text-primary"
+                  />
+                )}
+                {hop.device}
+              </span>
               {hop.route ? (
                 <span className="text-muted-foreground">
                   {' '}
