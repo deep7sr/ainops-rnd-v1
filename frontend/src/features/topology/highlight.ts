@@ -46,6 +46,31 @@ export interface MapHighlight {
   caption: MapCaption | null
 }
 
+/** The agent on the map (features/investigate/agent-walk.ts). */
+export interface AgentConsole {
+  /** The step it belongs to: a new step is a new console. */
+  key: string
+  device: string
+  /** The command run on the device: the real one once the result is in, before that the one the
+   *  reviewed catalog has for this tool and platform ('' when neither is known). */
+  command: string
+  /** The first lines the device answered (redacted; "…" where lines were left out). */
+  lines: string[]
+  state: 'running' | 'ok' | 'problem' | 'error'
+  /** One line: the summary, the problem found, or why it failed. */
+  verdict: string
+}
+
+export interface AgentWalk {
+  /** The devices the agent ran commands on, in order (a device twice in a row counts once). */
+  trail: string[]
+  /** Where the agent is: the device of its latest command (null before the first). */
+  at: string | null
+  /** checking: a tool is running. thinking: the AI is deciding the next step. resting: done. */
+  mode: 'checking' | 'thinking' | 'resting'
+  console: AgentConsole | null
+}
+
 export const NO_HIGHLIGHT: MapHighlight = {
   path: [],
   states: new Map(),

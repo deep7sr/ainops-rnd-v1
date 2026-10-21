@@ -10,9 +10,11 @@ import type { GraphDevice, GraphLink, Topology } from '@/api'
 import { DeviceGlyph } from '@/components/device-glyph'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
+import { AgentConsoleOverlay, AgentLayer } from './agent-layer'
 import {
   boxIssue,
   NO_HIGHLIGHT,
+  type AgentWalk,
   type DeviceState,
   type MapHighlight,
   type MapPing,
@@ -402,10 +404,13 @@ export function NetworkMap({
   selected = null,
   onSelect,
   showEdges = true,
+  agent = null,
   className,
 }: {
   topology: Topology
   highlight?: MapHighlight
+  /** The agent during a live investigation: its marker, trail and console. */
+  agent?: AgentWalk | null
   selected?: string | null
   onSelect?: (key: string) => void
   showEdges?: boolean
@@ -438,112 +443,124 @@ export function NetworkMap({
     : null
 
   return (
-    <svg
-      viewBox={viewBox}
-      role="group"
-      aria-label="Network map"
-      className={cn('h-auto w-full select-none', className)}
-    >
-      {sites.map((site, index) => (
-        <g key={site}>
-          <rect
-            x={columnWidth * index + 12}
-            y={12}
-            width={columnWidth - 24}
-            height={VIEW_HEIGHT - 24}
-            rx={8}
-            className="fill-muted/50 stroke-border"
-            strokeDasharray="4 4"
-          />
-          <text
-            x={Math.max(columnWidth * index + 28, viewLeft + 16)}
-            y={40}
-            className="fill-eyebrow text-[11px] font-semibold tracking-[0.12em]"
-          >
-            {site} · {(SITE_NAMES[site] ?? site).toUpperCase()}
-          </text>
-        </g>
-      ))}
-
-      {edges.map((edge, index) => {
-        const at = positions.get(edge.device)
-        if (!at) return null
-        const leftSide = at.x < VIEW_WIDTH / 2
-        const siblings = edges.filter((e) => e.device === edge.device)
-        const offset = (siblings.indexOf(edge) - (siblings.length - 1) / 2) * 22
-        const x0 = at.x + (leftSide ? -NODE_WIDTH / 2 : NODE_WIDTH / 2)
-        const x1 = x0 + (leftSide ? -26 : 26)
-        const y = at.y + offset
-        const label = `${edge.name} ${edge.ipv4[0]}`
-        const width = label.length * 5.7 + 12
-        return (
-          <g
-            key={`${edge.device}:${edge.name}:${index}`}
-            aria-label={`${edge.device} ${label}, no known peer`}
-          >
-            <line
-              x1={x0}
-              y1={y}
-              x2={x1}
-              y2={y}
-              strokeDasharray="3 3"
-              className="stroke-muted-foreground/50"
-            />
+    <div className="relative">
+      <svg
+        viewBox={viewBox}
+        role="group"
+        aria-label="Network map"
+        className={cn('h-auto w-full select-none', className)}
+      >
+        {sites.map((site, index) => (
+          <g key={site}>
             <rect
-              x={leftSide ? x1 - width : x1}
-              y={y - 9}
-              width={width}
-              height={18}
-              rx={3}
-              className="fill-background stroke-border"
+              x={columnWidth * index + 12}
+              y={12}
+              width={columnWidth - 24}
+              height={VIEW_HEIGHT - 24}
+              rx={8}
+              className="fill-muted/50 stroke-border"
+              strokeDasharray="4 4"
             />
             <text
-              x={leftSide ? x1 - width / 2 : x1 + width / 2}
-              y={y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              className="fill-muted-foreground font-mono text-[9px]"
+              x={Math.max(columnWidth * index + 28, viewLeft + 16)}
+              y={40}
+              className="fill-eyebrow text-[11px] font-semibold tracking-[0.12em]"
             >
-              {label}
+              {site} · {(SITE_NAMES[site] ?? site).toUpperCase()}
             </text>
           </g>
-        )
-      })}
+        ))}
 
-      {topology.links.map((link) => (
-        <LinkLine
-          key={link.key}
-          link={link}
-          positions={positions}
-          highlight={highlight}
-          investigating={investigating}
-          selected={selected === link.key}
-          onSelect={onSelect}
-        />
-      ))}
-      {topology.devices.map((device) => {
-        const at = positions.get(device.name)
-        return at ? (
-          <DeviceBox
-            key={device.name}
-            device={device}
-            at={at}
+        {edges.map((edge, index) => {
+          const at = positions.get(edge.device)
+          if (!at) return null
+          const leftSide = at.x < VIEW_WIDTH / 2
+          const siblings = edges.filter((e) => e.device === edge.device)
+          const offset = (siblings.indexOf(edge) - (siblings.length - 1) / 2) * 22
+          const x0 = at.x + (leftSide ? -NODE_WIDTH / 2 : NODE_WIDTH / 2)
+          const x1 = x0 + (leftSide ? -26 : 26)
+          const y = at.y + offset
+          const label = `${edge.name} ${edge.ipv4[0]}`
+          const width = label.length * 5.7 + 12
+          return (
+            <g
+              key={`${edge.device}:${edge.name}:${index}`}
+              aria-label={`${edge.device} ${label}, no known peer`}
+            >
+              <line
+                x1={x0}
+                y1={y}
+                x2={x1}
+                y2={y}
+                strokeDasharray="3 3"
+                className="stroke-muted-foreground/50"
+              />
+              <rect
+                x={leftSide ? x1 - width : x1}
+                y={y - 9}
+                width={width}
+                height={18}
+                rx={3}
+                className="fill-background stroke-border"
+              />
+              <text
+                x={leftSide ? x1 - width / 2 : x1 + width / 2}
+                y={y}
+                textAnchor="middle"
+                dominantBaseline="central"
+                className="fill-muted-foreground font-mono text-[9px]"
+              >
+                {label}
+              </text>
+            </g>
+          )
+        })}
+
+        {topology.links.map((link) => (
+          <LinkLine
+            key={link.key}
+            link={link}
+            positions={positions}
             highlight={highlight}
             investigating={investigating}
-            note={note?.device === device.name ? note : null}
-            selected={selected === device.name}
+            selected={selected === link.key}
             onSelect={onSelect}
           />
-        ) : null
-      })}
-      {highlight.pings.map((ping) => (
-        <PingPacket
-          key={ping.key}
-          ping={ping}
+        ))}
+        {topology.devices.map((device) => {
+          const at = positions.get(device.name)
+          return at ? (
+            <DeviceBox
+              key={device.name}
+              device={device}
+              at={at}
+              highlight={highlight}
+              investigating={investigating}
+              note={note?.device === device.name ? note : null}
+              selected={selected === device.name}
+              onSelect={onSelect}
+            />
+          ) : null
+        })}
+        {highlight.pings.map((ping) => (
+          <PingPacket
+            key={ping.key}
+            ping={ping}
+            positions={positions}
+            reducedMotion={reducedMotion}
+          />
+        ))}
+        {agent && <AgentLayer walk={agent} positions={positions} links={topology.links} />}
+      </svg>
+      {agent && (
+        <AgentConsoleOverlay
+          console={agent.console}
           positions={positions}
-          reducedMotion={reducedMotion}
+          viewLeft={viewLeft}
+          viewWidth={viewRight - viewLeft}
+          instant={reducedMotion}
         />
-      ))}
-    </svg>
+      )}
+    </div>
   )
 }

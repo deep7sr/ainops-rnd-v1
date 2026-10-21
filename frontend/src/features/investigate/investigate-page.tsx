@@ -30,6 +30,7 @@ import { deriveInvestigation, touchesNetwork, type Now } from './derive'
 import { DevicePanel } from './device-panel'
 import { OutcomeBadge, ReportCard } from './report-card'
 import { formatMs } from './format'
+import { agentWalk } from './agent-walk'
 import { NowBanner } from './now-banner'
 import { usePacedEvents } from './use-paced-events'
 import { Timeline } from './timeline'
@@ -432,6 +433,7 @@ function Run({ runId }: { runId: string }) {
   )
   const view = useMemo(() => deriveInvestigation(events, deviceNames), [events, deviceNames])
   const turns = useMemo(() => conversationTurns(events, deviceNames), [events, deviceNames])
+  const commands = useQuery({ queryKey: ['commands'], queryFn: api.commands })
   const [focused, setFocused] = useState<string | null>(null)
   const [panelDevice, setPanelDevice] = useState<string | null>(null)
   // A message was sent and its turn has not shown up in the events yet.
@@ -444,6 +446,16 @@ function Run({ runId }: { runId: string }) {
     : error && view.now.kind !== 'done'
       ? { kind: 'stopped', message: error }
       : view.now
+
+  // The agent on the map: where it went, where it is, what its console shows.
+  const platforms = useMemo(
+    () => new Map(topology.data?.devices.map((d) => [d.name, d.platform]) ?? []),
+    [topology.data],
+  )
+  const walk = useMemo(
+    () => agentWalk(view.steps, running, platforms, commands.data),
+    [view.steps, running, platforms, commands.data],
+  )
 
   // Follow the live steps while the investigation runs.
   useEffect(() => {
@@ -510,6 +522,7 @@ function Run({ runId }: { runId: string }) {
                   <NetworkMap
                     topology={topology.data}
                     highlight={view.highlight}
+                    agent={walk}
                     showEdges={false}
                     selected={panelDevice}
                     onSelect={(key) => {

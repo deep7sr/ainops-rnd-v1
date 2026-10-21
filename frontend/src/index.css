@@ -309,6 +309,20 @@
   }
 }
 
+/* Live map: a light running round the device a command runs on. Set --perimeter (border length). */
+@keyframes scan-run {
+  to {
+    stroke-dashoffset: calc(var(--perimeter) * -1);
+  }
+}
+
+@utility scan-run {
+  animation: scan-run 1.6s linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @utility path-draw {
   stroke-dasharray: var(--len);
   animation: path-draw 600ms ease-out var(--delay, 0ms) both;
