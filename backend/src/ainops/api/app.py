@@ -106,6 +106,7 @@ async def _list_tools(url: str) -> list[dict[str, Any]]:
 async def health() -> dict[str, Any]:
     status: dict[str, Any] = {
         "executor": "live",
+        "lab_simulated": settings.lab_simulated,
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
         "llm_configured": settings.llm_configured,

@@ -1,0 +1,175 @@
+# The simulated lab: Praveen's TRV/MAA lab as it was on the EVE-NG lab laptop on 2026-10-07,
+# rebuilt from the live recordings in fixtures/ (show ip interface, cdp, ospf, routes, arp, Junos
+# JSON). Names, consoles ports, platforms and logins come from lab/inventory.yaml; this file only
+# describes the network behind them.
+#
+# Kept on purpose, because the real lab has them too:
+# - both vSRX have no interface in any security zone (they drop all traffic through and to them);
+# - ISP-TRV-1 Fa0/0 is shut; there is no backup path and no static route;
+# - as in EVE-NG, shutting one end of a cable does not take the other end down.
+# It matches the knowledge graph discovery built on the real lab on 10-07 at 09:50 UTC (ISP-MAA-1
+# had Praveen's fix then: 10.10.7.1/24, upstream on the phone hotspot). The older recordings show
+# ISP-MAA-1 before that fix, which is the fault isp-maa-1-wrong-subnet.
+#
+# The answers are worked out from this model and the applied faults (bottom of the file); nothing
+# here is a recorded output.
+
+devices:
+  ISP-TRV-1:
+    node: 2               # EVE node id: MAC addresses are ca<node>.<mac_id>.<slot/port> (dynamips)
+    mac_id: 35d9
+    interfaces:
+      FastEthernet0/0: {admin: down}
+      FastEthernet1/0: {address: 10.10.1.1/24}
+      FastEthernet2/0: {admin: down}
+
+  FWL-TRV:
+    node: 3               # vSRX MACs are 50:00:00:<node>:00:<port+1> (EVE qemu)
+    interfaces:
+      ge-0/0/0: {address: 10.10.1.2/24}
+      ge-0/0/1: {address: 10.10.2.1/24}
+      ge-0/0/2: {}
+    zones:
+      trust: []
+      untrust: []
+
+  CORE-SW-TRV:
+    node: 1
+    mac_id: "3507"
+    interfaces:
+      FastEthernet0/0: {address: 10.10.2.2/24}
+      Ethernet1/0: {address: 192.168.100.1/24}
+      Ethernet1/1: {admin: down}
+      Ethernet1/2: {admin: down}
+      Ethernet1/3: {admin: down}
+      FastEthernet2/0: {address: 10.10.3.1/24}
+    ospf:
+      process: 1
+      router_id: 192.168.100.1
+      networks:
+        - 10.10.2.0 0.0.0.255 area 0
+        - 10.10.3.0 0.0.0.255 area 0
+        - 192.168.100.0 0.0.0.255 area 0
+
+  IPLC-RTR-TRV:
+    node: 7
+    mac_id: 4a9c
+    interfaces:
+      FastEthernet0/0: {address: 10.10.3.2/24}
+      Ethernet1/0: {admin: down}
+      Ethernet1/1: {admin: down}
+      Ethernet1/2: {admin: down}
+      Ethernet1/3: {admin: down}
+      FastEthernet2/0: {address: 10.10.4.1/24}
+    ospf:
+      process: 1
+      router_id: 10.10.4.1
+      networks:
+        - 10.10.3.0 0.0.0.255 area 0
+        - 10.10.4.0 0.0.0.255 area 0
+
+  IPLC-RTR-MAA:
+    node: 8
+    mac_id: 50ec
+    interfaces:
+      FastEthernet0/0: {address: 10.10.5.1/24}
+      FastEthernet1/0: {admin: down}
+      FastEthernet2/0: {address: 10.10.4.2/24}
+    ospf:
+      process: 1
+      router_id: 10.10.5.1
+      networks:
+        - 10.10.4.0 0.0.0.255 area 0
+        - 10.10.5.0 0.0.0.255 area 0
+
+  CORE-SW-MAA:
+    node: 6
+    mac_id: 497f
+    interfaces:
+      FastEthernet0/0: {address: 10.10.6.2/24}
+      Ethernet1/0: {address: 192.168.200.1/24}
+      Ethernet1/1: {admin: down}
+      Ethernet1/2: {admin: down}
+      Ethernet1/3: {admin: down}
+      FastEthernet2/0: {address: 10.10.5.2/24}
+    ospf:
+      process: 1
+      router_id: 192.168.200.1
+      networks:
+        - 10.10.5.0 0.0.0.255 area 0
+        - 10.10.6.0 0.0.0.255 area 0
+        - 192.168.200.0 0.0.0.255 area 0
+
+  FWL-MAA:
+    node: 5
+    interfaces:
+      ge-0/0/0: {address: 10.10.7.2/24}
+      ge-0/0/1: {address: 10.10.6.1/24}
+      ge-0/0/2: {}
+    zones:
+      trust: []
+      untrust: []
+
+  ISP-MAA-1:
+    node: 4
+    mac_id: "3826"
+    interfaces:
+      FastEthernet0/0: {address: 172.20.10.5/28}   # EVE cloud bridged to the laptop's Wi-Fi
+      FastEthernet1/0: {address: 10.10.7.1/24}
+      FastEthernet2/0: {admin: down}
+
+# End hosts: they answer pings and send replies to their gateway. No console.
+hosts:
+  TRV-PC: {address: 192.168.100.10/24, gateway: 192.168.100.1, mac: 0050.7966.6801}
+  MAA-PC: {address: 192.168.200.10/24, gateway: 192.168.200.1, mac: 0050.7966.6802}
+  hotspot: {address: 172.20.10.1/28, mac: 3ac2.8d14.5e64}   # the phone the lab laptop used
+
+# The cables, as "device interface" pairs (a host's end is just its name).
+links:
+  - [ISP-TRV-1 FastEthernet1/0, FWL-TRV ge-0/0/0]
+  - [FWL-TRV ge-0/0/1, CORE-SW-TRV FastEthernet0/0]
+  - [CORE-SW-TRV Ethernet1/0, TRV-PC]
+  - [CORE-SW-TRV FastEthernet2/0, IPLC-RTR-TRV FastEthernet0/0]
+  - [IPLC-RTR-TRV FastEthernet2/0, IPLC-RTR-MAA FastEthernet2/0]   # the leased line (IPLC)
+  - [IPLC-RTR-MAA FastEthernet0/0, CORE-SW-MAA FastEthernet2/0]
+  - [CORE-SW-MAA Ethernet1/0, MAA-PC]
+  - [CORE-SW-MAA FastEthernet0/0, FWL-MAA ge-0/0/1]
+  - [FWL-MAA ge-0/0/0, ISP-MAA-1 FastEthernet1/0]
+  - [ISP-MAA-1 FastEthernet0/0, hotspot]
+
+# Faults: named changes to the model. `labsim fault <name>` applies one while the simulator runs,
+# `labsim heal` removes them. Each change is one of:
+#   {device, interface, admin: up|down}        shut / no shut
+#   {device, interface, address: a.b.c.d/len}  a wrong address
+#   {device, ospf_passive: interface}          OSPF stops talking on that interface
+#   {device, ospf_remove_network: "net wildcard area n"}   a network no longer in OSPF
+faults:
+  fault-1:
+    description: The leased line is shut at the MAA end (IPLC-RTR-MAA Fa2/0 shutdown), as on the real lab on 10-07.
+    changes:
+      - {device: IPLC-RTR-MAA, interface: FastEthernet2/0, admin: down}
+
+  leased-line-wrong-ip:
+    description: IPLC-RTR-MAA Fa2/0 has a wrong address (10.10.40.2/24); the link is up, OSPF is not.
+    changes:
+      - {device: IPLC-RTR-MAA, interface: FastEthernet2/0, address: 10.10.40.2/24}
+
+  leased-line-ospf-passive:
+    description: OSPF is passive on IPLC-RTR-TRV Fa2/0; the interface is up, the neighbour is missing.
+    changes:
+      - {device: IPLC-RTR-TRV, ospf_passive: FastEthernet2/0}
+
+  maa-lan-gateway-down:
+    description: The MAA LAN gateway interface is shut (CORE-SW-MAA Eth1/0).
+    changes:
+      - {device: CORE-SW-MAA, interface: Ethernet1/0, admin: down}
+
+  maa-lan-not-announced:
+    description: CORE-SW-MAA no longer announces the MAA LAN 192.168.200.0/24 in OSPF.
+    changes:
+      - {device: CORE-SW-MAA, ospf_remove_network: 192.168.200.0 0.0.0.255 area 0}
+
+  isp-maa-1-wrong-subnet:
+    description: ISP-MAA-1 Fa1/0 is 10.10.8.1/24, not in FWL-MAA's subnet 10.10.7.0/24 (the real lab before Praveen's fix, and again after a reboot without write memory).
+    changes:
+      - {device: ISP-MAA-1, interface: FastEthernet1/0, address: 10.10.8.1/24}

@@ -209,11 +209,19 @@ export function Shell() {
           <p className="text-sm font-medium">{current?.label ?? 'AINOPS'}</p>
           <div className="ml-auto flex items-center gap-2">
             <HealthBar health={health.data} />
-            {health.data && (
-              <span className="rounded border border-status-healthy-border bg-status-healthy-bg px-2 py-0.5 text-[11px] font-semibold tracking-wide text-status-healthy uppercase">
-                Lab · live devices
-              </span>
-            )}
+            {health.data &&
+              (health.data.lab_simulated ? (
+                <span
+                  title="The consoles are the simulated copy of the lab on this laptop, not the real devices"
+                  className="rounded border border-status-warning-border bg-status-warning-bg px-2 py-0.5 text-[11px] font-semibold tracking-wide text-status-warning uppercase"
+                >
+                  Lab · simulated devices
+                </span>
+              ) : (
+                <span className="rounded border border-status-healthy-border bg-status-healthy-bg px-2 py-0.5 text-[11px] font-semibold tracking-wide text-status-healthy uppercase">
+                  Lab · live devices
+                </span>
+              ))}
             <Button
               variant="ghost"
               size="icon"

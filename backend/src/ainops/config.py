@@ -20,6 +20,9 @@ load_dotenv(REPO_ROOT / ".env")
 class Settings(BaseSettings):
     # AINOPS always works on the live lab: the EVE-NG host whose consoles it logs into.
     lab_eve_host: str = ""
+    # True when those consoles are the simulated copy of the lab on this laptop
+    # (scripts/start-all.ps1 -Sim). The UI says so, so its results are never taken for real ones.
+    lab_simulated: bool = False
     lab_inventory: Path = REPO_ROOT / "lab" / "inventory.yaml"
     logs_dir: Path = REPO_ROOT / "logs"
     # Expert skills for frequent questions (skills/<name>/SKILL.md, see agent/skills.py).

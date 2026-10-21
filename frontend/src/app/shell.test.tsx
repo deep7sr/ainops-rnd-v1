@@ -91,3 +91,43 @@ describe('the Cases menu item', () => {
     expect(await screen.findByLabelText('2 waiting for review')).toHaveTextContent('2')
   })
 })
+
+describe('the lab badge', () => {
+  function healthSays(labSimulated: boolean) {
+    const up = { ok: true, tools: 1 }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        url === '/api/health'
+          ? Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  executor: 'live',
+                  lab_simulated: labSimulated,
+                  llm_model: 'm',
+                  llm_configured: true,
+                  mcp_network: up,
+                  mcp_topology: up,
+                  graph: { ok: true, last_discovery: null },
+                }),
+              ),
+            )
+          : new Promise(() => {}),
+      ),
+    )
+  }
+
+  it('says the devices are simulated when AINOPS works on the simulated lab', async () => {
+    healthSays(true)
+    openAt('/')
+    expect(await screen.findByText('Lab · simulated devices')).toBeInTheDocument()
+    expect(screen.queryByText('Lab · live devices')).not.toBeInTheDocument()
+  })
+
+  it('says live devices on the real lab', async () => {
+    healthSays(false)
+    openAt('/')
+    expect(await screen.findByText('Lab · live devices')).toBeInTheDocument()
+    expect(screen.queryByText('Lab · simulated devices')).not.toBeInTheDocument()
+  })
+})

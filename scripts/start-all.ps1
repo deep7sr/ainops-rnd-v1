@@ -2,11 +2,21 @@
 #   Neo4j (graph) -> network MCP (8101) -> topology MCP (8102) -> API (8000) -> web UI (5173)
 # Then open http://localhost:5173
 #
-# AINOPS always works on the live lab: LAB_EVE_HOST=<EVE-NG address> in the repo-root .env.
+# AINOPS works on the live lab: LAB_EVE_HOST=<EVE-NG address> in the repo-root .env.
+# With -Sim it works on the simulated lab instead (backend/src/labsim, for when the EVE-NG lab is
+# not available): a "lab simulator" window opens first, and every window gets
+# LAB_EVE_HOST=127.0.0.1 and LAB_SIMULATED=true (these win over .env; the UI then says
+# "simulated devices"). Faults: `cd backend; uv run python -m labsim faults`.
+param([switch]$Sim)
 
 $repo = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $repo "backend"
 $frontend = Join-Path $repo "frontend"
+
+if ($Sim) {
+    $env:LAB_EVE_HOST = "127.0.0.1"
+    $env:LAB_SIMULATED = "true"
+}
 
 function Start-Piece($title, $folder, $command) {
     $script = "`$Host.UI.RawUI.WindowTitle = '$title'; Set-Location '$folder'; $command"
@@ -25,7 +35,11 @@ function Wait-Port($port, $name, $seconds = 90) {
     Write-Warning "$name did not start on port $port within $seconds s: check its window"
 }
 
-Write-Host "Starting AINOPS..."
+Write-Host "Starting AINOPS$(if ($Sim) { ' on the SIMULATED lab' })..."
+if ($Sim) {
+    Start-Piece "AINOPS - lab simulator" $backend "uv run python -m labsim"
+    Wait-Port 32769 "Lab simulator"
+}
 Start-Piece "AINOPS - Neo4j" $repo "& '$repo\scripts\start-neo4j.ps1'"
 Wait-Port 7687 "Neo4j"
 Start-Piece "AINOPS - network MCP" $backend "uv run python -m ainops mcp-network"

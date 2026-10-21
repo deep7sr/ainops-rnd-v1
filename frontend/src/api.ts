@@ -116,6 +116,8 @@ export interface ServiceStatus {
 export interface Health {
   /** AINOPS only works on the live devices. */
   executor: 'live'
+  /** The devices are the simulated copy of the lab on this laptop, not the real lab. */
+  lab_simulated: boolean
   llm_model: string
   llm_configured: boolean
   mcp_network: ServiceStatus
@@ -594,6 +596,9 @@ export type RunEvent =
       error?: string | null
       at_ms: number
     }
+  /** AINOPS's own check before answering: the root cause blamed something none of its cited
+   *  checks showed, so the AI was sent back once to check it on that device. */
+  | { type: 'recheck'; blamed: string[]; at_ms: number }
   /** After a reply that found a root cause: its case was drafted or updated (or not saved). */
   | { type: 'case'; id?: string; status?: CaseStatus; error?: string }
   | { type: 'thought'; text: string; tools: string[]; at_ms: number }
