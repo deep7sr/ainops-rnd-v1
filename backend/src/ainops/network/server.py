@@ -82,9 +82,11 @@ def build_service() -> NetworkService:
         audit=AuditLog(settings.logs_dir / "network-audit.jsonl"),
         commands=load_commands(),
         # Read only: trace_route asks the knowledge graph which device owns a next-hop address,
-        # get_ospf_neighbors which neighbours a router normally has.
+        # get_ospf_neighbors which neighbours a router normally has, get_firewall_zones which
+        # device each firewall port is cabled to.
         locate=graph.owner_of_ip,
         expected_ospf=graph.ospf_peers,
+        cabling=graph.links,
     )
 
 

@@ -32,8 +32,8 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.types import Command
 
 from ainops.agent.conversation import Earlier, follow_up_prompt
-from ainops.agent.prompts import SYSTEM_PROMPT
-from ainops.agent.report import EvidenceRecord, Report, verify
+from ainops.agent.prompts import RECHECK, SYSTEM_PROMPT
+from ainops.agent.report import EvidenceRecord, Report, not_shown, verify
 from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills, step_tools
 from ainops.config import Settings
 from ainops.similar import Hints, hints_prompt
@@ -480,6 +480,17 @@ async def investigate(
         {"messages": [*history, HumanMessage(question)]}, config={"recursion_limit": 70}
     )
     report = result.get("structured_response")
+    # Check before answering: a root cause none of its cited checks shows goes back once, to be
+    # checked directly (while the tool budget lasts). What comes back is verified as usual.
+    blamed = not_shown(report, run.evidence) if isinstance(report, Report) else []
+    if blamed and run.tool_calls < MAX_TOOL_CALLS:
+        await emit({"type": "recheck", "blamed": blamed, "at_ms": run.elapsed_ms()})
+        note = HumanMessage(RECHECK.format(blamed=", ".join(blamed)))
+        result = await agent.ainvoke(
+            {"messages": [*result["messages"], note]}, config={"recursion_limit": 70}
+        )
+        again = result.get("structured_response")
+        report = again if isinstance(again, Report) else report
     if not isinstance(report, Report):
         last = next((m for m in reversed(result["messages"]) if isinstance(m, AIMessage)), None)
         report = Report(

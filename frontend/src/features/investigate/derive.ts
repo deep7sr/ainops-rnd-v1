@@ -12,8 +12,9 @@ import { readTrace } from './trace'
 
 export interface Step {
   /** 'skill': the agent opened an expert skill (no tool ran). 'hints': similar past cases were
-   *  looked up for this reply (no tool ran; hints, never evidence). */
-  kind: 'tool' | 'refused' | 'skill' | 'hints'
+   *  looked up for this reply (no tool ran; hints, never evidence). 'recheck': AINOPS sent the
+   *  answer back because no cited check showed what it blamed (no tool ran). */
+  kind: 'tool' | 'refused' | 'skill' | 'hints' | 'recheck'
   key: string
   evidenceId: string | null
   tool: string
@@ -282,6 +283,29 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         })
         break
       }
+      case 'recheck':
+        steps.push({
+          kind: 'recheck',
+          key: `recheck-${steps.length}`,
+          evidenceId: null,
+          tool: 'recheck',
+          server: 'agent',
+          args: {},
+          why: '',
+          sentence: `AINOPS check: no check showed ${strings(event.blamed).join(', ')}`,
+          state: 'ok',
+          summary:
+            'The answer blamed it without proof, so the AI was sent back to check it on that device before answering.',
+          data: null,
+          evidence: null,
+          health: null,
+          device: null,
+          durationMs: 0,
+          atMs: event.at_ms,
+          skillStep: null,
+          turn,
+        })
+        break
       case 'refused':
         steps.push({
           kind: 'refused',

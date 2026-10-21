@@ -108,6 +108,8 @@ class NetworkService:
     locate: trace.Locate | None = None
     # The OSPF neighbours a router normally has (GraphStore.ospf_peers), to spot a missing one.
     expected_ospf: Callable[[str], list[dict[str, Any]]] | None = None
+    # The cables of a device (GraphStore.links): which device each firewall port faces.
+    cabling: Callable[[str], list[dict[str, Any]]] | None = None
 
     # ---------- plumbing ----------
 
@@ -435,24 +437,51 @@ class NetworkService:
             return None, " (interfaces not checked: their output could not be parsed)"
         return result.data, ""
 
+    def _faces(self, device: str) -> tuple[dict[str, str], str]:
+        """Port -> the device its cable goes to ('ISP-TRV-1 Fa1/0, isp-router'), from the
+        knowledge graph, so a zone is never suggested by guessing which side is outside."""
+        if self.cabling is None:
+            return {}, ""
+        try:
+            name = self.inventory.get(device).name
+        except UnknownDeviceError:
+            return {}, ""  # the tool itself reports the unknown device
+        try:
+            links = self.cabling(name)
+        except Exception:  # noqa: BLE001 - the graph driver raises its own errors
+            return {}, " (cabling not checked: knowledge graph not reachable)"
+        roles = {d.name: d.role for d in self.inventory.devices}
+        faces = {}
+        for link in links:
+            mine, peer = ("a", "b") if link["a"] == name else ("b", "a")
+            role = roles.get(link[peer])
+            faces[link[f"{mine}_interface"]] = f"{link[peer]} {link[f'{peer}_interface']}" + (
+                f", {role}" if role else ""
+            )
+        return faces, ""
+
     def get_firewall_zones(self, device: str) -> ToolResult:
         interfaces, unchecked = self._firewall_interfaces(device)
+        faces, not_cabled = self._faces(device) if interfaces else ({}, "")
 
         def parse(d: Device, raw: RawOutput) -> tuple[Any, str]:
             rows = parsers.firewall_zones(raw.text)
             text = "; ".join(f"{r['zone']}: {', '.join(r['interfaces']) or '-'}" for r in rows)
             outside = health.outside_zones(rows, interfaces or [])
             if outside:
-                listed = ", ".join(f"{r['name']} ({', '.join(r['ipv4'])})" for r in outside)
-                text = (text + "; " if text else "") + f"NOT IN ANY ZONE: {listed}"
-            return rows, (text or "no security zones") + unchecked
+                listed = ", ".join(
+                    f"{r['name']} ({', '.join([*r['ipv4'], *_cabled(faces, r['name'])])})"
+                    for r in outside
+                )
+                text = (text + "; " if text else "") + f"NOT IN ANY ZONE: {listed}; {ZONE_NOTE}"
+            return rows, (text or "no security zones") + unchecked + not_cabled
 
         return self._run(
             "get_firewall_zones",
             device,
             "firewall_zones",
             parse,
-            assess=lambda rows: health.firewall_zones(rows, interfaces),
+            assess=lambda rows: health.firewall_zones(rows, interfaces, faces),
         )
 
     def trace_route(self, source: str, destination: str) -> TraceResult:
@@ -552,6 +581,17 @@ class NetworkService:
             )
         name, row = next(iter(gateways.items()))
         return name, f"{address} is on {name}'s network {row['subnet']} ({row['interface']})"
+
+
+# What a fix needs besides the zone (Junos SRX): zones alone pass no traffic.
+ZONE_NOTE = (
+    "a zone alone is not enough: traffic between two zones also needs a security policy, and "
+    "ping to the firewall itself needs host-inbound ping in that zone"
+)
+
+
+def _cabled(faces: dict[str, str], port: str) -> list[str]:
+    return [f"cabled to {faces[port]}"] if port in faces else []
 
 
 def _trace_health(walked: trace.Trace, destination: str) -> Health:

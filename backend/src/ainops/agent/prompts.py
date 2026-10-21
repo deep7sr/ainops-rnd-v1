@@ -30,4 +30,17 @@ Rules:
 - "No fault found" and "inconclusive" are valid outcomes. Never invent a cause.
 - Write for a junior engineer: plain words, name the device and interface, say what to do next.
 - Next steps may suggest a change for a human to make; you never make it yourself.
+- Blame only what a check of THAT device shows: put it in `affected` as "DEVICE INTERFACE" and
+  cite that check. An address or interface seen on one device says nothing about another.
+- A fix that depends on which side something faces (security zones, inside/outside, upstream/
+  downstream) must rest on a check of the cabling (get_device_links), never on a guess.
 """
+
+# Sent back to the agent once, by code, when its root cause blames something none of its cited
+# checks shows (report.not_shown).
+RECHECK = """\
+AINOPS check (code, not the engineer): your root cause blames {blamed}, but none of the checks \
+you cited for it shows that. Before answering, check it directly on that device (for example \
+get_interfaces or get_interface_detail), then write the report again. Keep the root cause only \
+if a check of that device shows it and you cite it; otherwise change the root cause, or say \
+inconclusive."""

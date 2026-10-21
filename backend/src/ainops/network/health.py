@@ -112,16 +112,22 @@ def outside_zones(
     ]
 
 
-def firewall_zones(zones: list[dict[str, Any]], interfaces: list[dict[str, Any]] | None) -> Health:
+def firewall_zones(
+    zones: list[dict[str, Any]],
+    interfaces: list[dict[str, Any]] | None,
+    faces: dict[str, str] | None = None,
+) -> Health:
     """`interfaces`: the firewall's own interfaces, read just before. Without them the zones are
-    only reported, not judged."""
+    only reported, not judged. `faces`: port -> the device its cable goes to (knowledge graph)."""
     if interfaces is None:
         return INFO
+    faces = faces or {}
     return _verdict(
         [
             Issue(
                 text=f"{row['name']} has an address ({', '.join(row['ipv4'])}) but is in no "
-                "security zone: the firewall drops its traffic",
+                "security zone: the firewall drops its traffic"
+                + (f" (its cable goes to {faces[row['name']]})" if row["name"] in faces else ""),
                 interface=row["name"],
             )
             for row in outside_zones(zones, interfaces)

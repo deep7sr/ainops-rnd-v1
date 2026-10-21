@@ -116,6 +116,122 @@ def test_inconclusive_is_low() -> None:
     assert verify(Report(outcome="inconclusive", summary="x"), {}).confidence == "low"
 
 
+# ---------- what the root cause blames must be shown by a cited check ----------
+
+# The checks of the 2026-10-21 run on the simulator (fault-1: IPLC-RTR-MAA Fa2/0 shut), summaries
+# as they were. The AI blamed CORE-SW-TRV Fa2/0, which none of them shows.
+FAULT1_CHECKS = {
+    "E6": EvidenceRecord(
+        "E6", "get_routing_protocols", "CORE-SW-TRV",
+        "protocols: ospf 1; OSPF networks: 10.10.2.0 area 0, 10.10.3.0 area 0, 192.168.100.0 "
+        "area 0", "live", True,
+    ),
+    "E10": EvidenceRecord(
+        "E10", "get_ospf_neighbors", "IPLC-RTR-TRV",
+        "1 OSPF neighbour(s), all FULL; MISSING (FULL at discovery): IPLC-RTR-MAA on Fa2/0",
+        "live", True,
+    ),
+    "E13": EvidenceRecord(
+        "E13", "get_ospf_neighbors", "IPLC-RTR-MAA",
+        "1 OSPF neighbour(s), all FULL; MISSING (FULL at discovery): IPLC-RTR-TRV on Fa2/0",
+        "live", True,
+    ),
+    "E15": EvidenceRecord(
+        "E15", "get_interfaces", "IPLC-RTR-TRV", "6 interfaces; all addressed interfaces up",
+        "live", True,
+    ),
+    "E16": EvidenceRecord(
+        "E16", "get_interfaces", "IPLC-RTR-MAA", "3 interfaces; with an address but not up: Fa2/0",
+        "live", True,
+    ),
+}  # fmt: skip
+
+
+def _blaming(affected: list[str], cited: list[str]) -> Report:
+    return Report(
+        outcome="diagnosed", summary="x", root_cause="y", root_cause_evidence=cited,
+        affected=affected,
+    )  # fmt: skip
+
+
+def test_a_root_cause_no_cited_check_shows_is_low_however_many_checks_it_cites() -> None:
+    verdict = verify(_blaming(["CORE-SW-TRV Fa2/0"], ["E6", "E10", "E13"]), FAULT1_CHECKS)
+    assert verdict.confidence == "low"
+    assert verdict.reasons[-1] == (
+        "nothing cited for the root cause shows CORE-SW-TRV Fa2/0: check it directly"
+    )
+
+
+def test_a_check_of_the_blamed_device_naming_the_interface_shows_it() -> None:
+    assert verify(_blaming(["IPLC-RTR-MAA Fa2/0"], ["E16"]), FAULT1_CHECKS).confidence == "medium"
+    verdict = verify(_blaming(["IPLC-RTR-MAA Fa2/0"], ["E16", "E10"]), FAULT1_CHECKS)
+    assert verdict.confidence == "high"
+    assert not any("nothing cited" in r for r in verdict.reasons)
+
+
+def test_the_interface_named_by_a_check_of_another_device_does_not_count() -> None:
+    """E10 is IPLC-RTR-TRV's view: 'Fa2/0' there is its own Fa2/0, not IPLC-RTR-MAA's."""
+    verdict = verify(_blaming(["IPLC-RTR-MAA Fa2/0"], ["E10", "E15"]), FAULT1_CHECKS)
+    assert verdict.confidence == "low"
+
+
+def test_a_check_of_the_device_that_does_not_name_the_interface_does_not_count() -> None:
+    verdict = verify(_blaming(["IPLC-RTR-TRV Fa0/0"], ["E15", "E10"]), FAULT1_CHECKS)
+    assert verdict.confidence == "low"
+
+
+def test_both_spellings_of_an_interface_are_the_same_interface() -> None:
+    long = verify(_blaming(["IPLC-RTR-MAA FastEthernet2/0"], ["E16"]), FAULT1_CHECKS)
+    assert long.confidence == "medium"
+    checks = {"E1": EvidenceRecord("E1", "get_interface_detail", "R1", "FastEthernet2/0 is "
+                                   "administratively down", "live", True)}  # fmt: skip
+    assert verify(_blaming(["R1 Fa2/0"], ["E1"]), checks).confidence == "medium"
+
+
+def test_a_junos_interface_is_matched_too() -> None:
+    checks = {
+        "E3": EvidenceRecord(
+            "E3", "get_firewall_zones", "FWL-TRV",
+            "trust: -; untrust: -; NOT IN ANY ZONE: ge-0/0/0 (10.10.1.2/24), ge-0/0/1 "
+            "(10.10.2.1/24)", "live", True,
+        )
+    }  # fmt: skip
+    assert verify(_blaming(["FWL-TRV ge-0/0/1"], ["E3"]), checks).confidence == "medium"
+    assert verify(_blaming(["FWL-TRV ge-0/0/2"], ["E3"]), checks).confidence == "low"
+
+
+def test_an_interface_range_blames_its_first_interface() -> None:
+    assert verify(_blaming(["IPLC-RTR-MAA Fa2/0-Fa2/1"], ["E16"]), FAULT1_CHECKS).confidence == (
+        "medium"
+    )
+    assert verify(_blaming(["IPLC-RTR-MAA Fa1/0‑Fa2/0"], ["E16"]), FAULT1_CHECKS).confidence == (
+        "low"
+    )
+
+
+def test_a_blamed_device_without_an_interface_needs_a_check_of_that_device() -> None:
+    assert verify(_blaming(["IPLC-RTR-MAA (down)"], ["E16"]), FAULT1_CHECKS).confidence == "medium"
+    assert verify(_blaming(["FWL-MAA"], ["E16"]), FAULT1_CHECKS).confidence == "low"
+
+
+def test_one_shown_item_is_enough() -> None:
+    report = _blaming(["CORE-SW-TRV Fa2/0", "IPLC-RTR-MAA Fa2/0"], ["E16", "E6"])
+    assert verify(report, FAULT1_CHECKS).confidence == "high"
+
+
+def test_a_failed_check_shows_nothing() -> None:
+    failed = {"E16": EvidenceRecord("E16", "get_interfaces", "IPLC-RTR-MAA", "Fa2/0 timed out",
+                                    "live", False)}  # fmt: skip
+    verdict = verify(_blaming(["IPLC-RTR-MAA Fa2/0"], ["E16"]), failed)
+    assert verdict.confidence == "low"
+    assert verdict.reasons == ["the root cause cites no valid evidence"]  # said once, not twice
+    # Next to a working check of another device, the failed one still shows nothing.
+    checks = {**FAULT1_CHECKS, **failed}
+    verdict = verify(_blaming(["IPLC-RTR-MAA Fa2/0"], ["E16", "E10"]), checks)
+    assert verdict.confidence == "low"
+    assert verdict.reasons[-1].startswith("nothing cited for the root cause shows")
+
+
 def test_tool_result_event_carries_the_code_verdict_for_the_live_map() -> None:
     events: list[dict[str, Any]] = []
 

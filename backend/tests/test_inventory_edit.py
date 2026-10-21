@@ -195,6 +195,9 @@ def test_the_network_server_reads_the_inventory_again_after_a_change(
         def ospf_peers(self, device: str | None = None) -> list[dict[str, Any]]:
             return []
 
+        def links(self, device: str | None = None) -> list[dict[str, Any]]:
+            return []
+
     monkeypatch.setattr(server, "GraphStore", Graph)
     monkeypatch.setattr(server.settings, "lab_eve_host", "eve.test")
     monkeypatch.setattr(server.settings, "lab_inventory", base)

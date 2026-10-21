@@ -32,8 +32,14 @@ def test_the_network_server_always_uses_the_live_devices(monkeypatch: pytest.Mon
         def ospf_peers(self, device: str | None = None) -> list[dict[str, Any]]:
             return []
 
+        def links(self, device: str | None = None) -> list[dict[str, Any]]:
+            return [{"a": "X"}]
+
     monkeypatch.setattr(server, "GraphStore", Graph)
-    assert isinstance(server.build_service().executor, LiveExecutor)
+    service = server.build_service()
+    assert isinstance(service.executor, LiveExecutor)
+    # The graph lookups are wired in (get_firewall_zones names each port's cable from it).
+    assert service.cabling is not None and service.cabling("FWL-MAA") == [{"a": "X"}]
 
 
 def test_without_the_lab_address_the_server_does_not_start(monkeypatch: pytest.MonkeyPatch) -> None:
