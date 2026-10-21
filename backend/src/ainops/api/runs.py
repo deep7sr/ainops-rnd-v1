@@ -48,8 +48,18 @@ class Run:
             self.changed.notify_all()
 
     async def stream(self, after: int = 0) -> AsyncIterator[str]:
-        """Server-Sent Events: every event after the first `after`, then new ones until done."""
+        """Server-Sent Events: every event after the first `after`, then new ones until done.
+
+        What happened before the viewer connected comes first, at once, followed by a `live` marker
+        (not an event of the run: no id, not stored). The UI shows that history straight away and
+        animates only what comes after the marker.
+        """
         sent = min(max(after, 0), len(self.events))
+        backlog = self.events[sent:]
+        for number, event in enumerate(backlog, start=sent + 1):
+            yield f"id: {number}\ndata: {json.dumps(event, default=str)}\n\n"
+        sent += len(backlog)
+        yield "event: live\ndata: {}\n\n"
         while True:
 
             def ready(seen: int = sent) -> bool:

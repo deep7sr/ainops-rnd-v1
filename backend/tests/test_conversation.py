@@ -394,7 +394,23 @@ def test_a_viewer_that_reconnects_gets_only_what_it_missed() -> None:
     everything = asyncio.run(lines(0))
     assert everything[0].startswith("id: 1\ndata: ")
     assert asyncio.run(lines(2))[0].startswith("id: 3\ndata: ")
-    assert asyncio.run(lines(3)) == ['data: {"type": "end"}\n\n']
+    assert asyncio.run(lines(3)) == [LIVE, 'data: {"type": "end"}\n\n']
+
+
+LIVE = "event: live\ndata: {}\n\n"
+
+
+def test_the_history_comes_first_then_the_live_marker_then_new_events() -> None:
+    async def watch() -> list[str]:
+        run = Run("inv-1", "investigation", "q", STARTED, _turn_one()[:2], False)
+        stream = run.stream(0)
+        seen = [await anext(stream) for _ in range(3)]  # two old events and the marker
+        await run.emit({"type": "thought", "text": "next", "tools": [], "at_ms": 5})
+        seen.append(await anext(stream))
+        return seen
+
+    seen = asyncio.run(watch())
+    assert [line.split("\n")[0] for line in seen] == ["id: 1", "id: 2", "event: live", "id: 3"]
 
 
 # ---------- the API ----------
@@ -460,4 +476,4 @@ def test_the_api_stream_skips_the_events_the_viewer_has(api: Any) -> None:
     assert body.startswith("id: 5\n")
     assert f"id: {total}\n" in body
     body = client.get(f"/api/runs/inv-test0001/events?after={total}").text
-    assert body == 'data: {"type": "end"}\n\n'
+    assert body == LIVE + 'data: {"type": "end"}\n\n'

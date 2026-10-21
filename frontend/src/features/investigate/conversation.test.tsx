@@ -124,6 +124,16 @@ class FakeEventSource {
     this.readyState = FakeEventSource.CLOSED
   }
 
+  private listeners = new Map<string, () => void>()
+  addEventListener(type: string, listener: () => void) {
+    this.listeners.set(type, listener)
+  }
+
+  /** The server's marker: the history has been sent, what comes next happens now. */
+  goLive() {
+    act(() => this.listeners.get('live')?.())
+  }
+
   send(...events: (RunEvent | { type: 'end' })[]) {
     act(() => {
       for (const event of events) {
@@ -206,6 +216,48 @@ describe('replying to AINOPS on the Investigate page', () => {
     latestSource().send({ type: 'stopped', message: 'Stopped by the engineer.' }, { type: 'end' })
     expect(screen.getByText('You stopped AINOPS before it finished.')).toBeInTheDocument()
     expect(screen.getByLabelText('Reply to AINOPS')).toBeInTheDocument()
+  })
+
+  it('a live burst reaches the screen one step at a time, never ahead of the agent', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+    try {
+      openInvestigation()
+      const source = latestSource()
+      source.send(...TURN_ONE) // what happened before the page opened: on screen at once
+      expect(screen.getByLabelText('Diagnosis')).toBeInTheDocument()
+      source.goLive()
+
+      const ospfResult: RunEvent = {
+        type: 'tool_result',
+        id: 'E7',
+        tool: 'get_ospf_neighbors',
+        server: 'network',
+        device: 'IPLC-RTR-TRV',
+        ok: true,
+        summary: 'Neighbour IPLC-RTR-MAA is missing',
+        data: [],
+        evidence: null,
+        health: null,
+        duration_ms: 40,
+        at_ms: 950,
+      }
+      // The reply arrives as one burst.
+      source.send(message('Look at OSPF'), started('Look at OSPF'), ospfCall, ospfResult, answered)
+      act(() => vi.advanceTimersByTime(0))
+      expect(screen.getAllByText(/Checking the OSPF neighbours of IPLC-RTR-TRV/).length).toBe(2)
+      expect(screen.queryByText(/Neighbour IPLC-RTR-MAA is missing/)).not.toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(1200)) // the check had its moment: now its result
+      expect(screen.getAllByText(/Neighbour IPLC-RTR-MAA is missing/).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/administratively down on IPLC-RTR-MAA\.$/)).not.toBeInTheDocument()
+
+      act(() => vi.advanceTimersByTime(1500)) // and then the answer
+      expect(
+        screen.getAllByText(/administratively down on IPLC-RTR-MAA\.$/).length,
+      ).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a conversation at its message limit points to a new investigation', () => {

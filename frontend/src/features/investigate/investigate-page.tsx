@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { CaseSection } from '@/features/cases/case-section'
 import { skillTitle } from '@/features/skills/labels'
 import { NetworkMap } from '@/features/topology/network-map'
+import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
 import { conversationTurns, MAX_MESSAGES, type Turn } from './conversation'
@@ -30,6 +31,7 @@ import { DevicePanel } from './device-panel'
 import { OutcomeBadge, ReportCard } from './report-card'
 import { formatMs } from './format'
 import { NowBanner } from './now-banner'
+import { usePacedEvents } from './use-paced-events'
 import { Timeline } from './timeline'
 
 const SUGGESTIONS = [
@@ -413,7 +415,16 @@ function ReplyBox({
 }
 
 function Run({ runId }: { runId: string }) {
-  const { events, done, error, resume } = useRunEvents(runId)
+  const stream = useRunEvents(runId)
+  const { error, resume } = stream
+  // Live events reach the screen paced, so the agent can be followed on the map (director.ts).
+  const events = usePacedEvents(
+    stream.events,
+    stream.arrivals,
+    stream.liveFrom,
+    !usePrefersReducedMotion(),
+  )
+  const done = stream.done && events.length === stream.events.length
   const topology = useQuery({ queryKey: ['topology'], queryFn: api.topology })
   const deviceNames = useMemo(
     () => topology.data?.devices.map((d) => d.name) ?? [],
