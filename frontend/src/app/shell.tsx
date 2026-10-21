@@ -13,7 +13,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect } from 'react'
+import { motion } from 'motion/react'
 import { NavLink, Outlet, useLocation } from 'react-router'
+import { DURATION, EASE_OUT } from '@/lib/motion'
 import { api, type Health } from '@/api'
 import { UstLogo } from '@/components/ust-logo'
 import { Button } from '@/components/ui/button'
@@ -172,6 +174,15 @@ export function Shell() {
                 <SidebarMenu>
                   {group.items.map((item) => (
                     <SidebarMenuItem key={item.to}>
+                      {isActive(location.pathname, item) && (
+                        // Slides from the page you left to the one you opened.
+                        <motion.span
+                          layoutId="nav-active"
+                          transition={{ duration: DURATION.base, ease: EASE_OUT }}
+                          aria-hidden="true"
+                          className="absolute inset-y-1.5 left-0 z-10 w-0.5 rounded-full bg-sidebar-primary"
+                        />
+                      )}
                       <SidebarMenuButton
                         asChild
                         isActive={isActive(location.pathname, item)}

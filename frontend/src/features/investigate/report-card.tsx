@@ -1,3 +1,4 @@
+import { motion } from 'motion/react'
 import {
   CircleCheck,
   CircleHelp,
@@ -8,6 +9,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
+import { rise } from '@/lib/motion'
 import type { Report } from '@/api'
 import { cn } from '@/lib/utils'
 import { needsEvidence, type Verdict } from './derive'
@@ -90,7 +92,13 @@ export function ReportCard({
   const withEvidence = needsEvidence(report.outcome)
 
   return (
-    <section aria-label="Diagnosis" className="rounded-lg border bg-card shadow-xs">
+    <motion.section
+      aria-label="Diagnosis"
+      variants={rise}
+      initial="hidden"
+      animate="shown"
+      className="rounded-lg border bg-card shadow-(--shadow-elevated)"
+    >
       <header className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
         <OutcomeBadge outcome={report.outcome} />
         {withEvidence && (
@@ -218,6 +226,6 @@ export function ReportCard({
           )}
         </div>
       </div>
-    </section>
+    </motion.section>
   )
 }

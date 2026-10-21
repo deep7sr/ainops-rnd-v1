@@ -494,7 +494,7 @@ function Run({ runId }: { runId: string }) {
               nothing to show on it. It keeps everything checked in the whole conversation. */}
           {touchesNetwork(view.steps) && (
             <>
-              <div className="rounded-lg border bg-card p-2">
+              <div className="rounded-lg border bg-card bg-dot-grid p-2">
                 {topology.data ? (
                   <NetworkMap
                     topology={topology.data}

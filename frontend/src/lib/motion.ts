@@ -27,9 +27,8 @@ export const rise: Variants = {
   shown: { opacity: 1, y: 0, scale: 1, transition: { duration: DURATION.slow, ease: EASE_OUT } },
 }
 
-/** One text replaces another in place (the "Now" banner). */
+/** A new text fades in where the old one was (the "Now" banner). */
 export const crossFade: Variants = {
   hidden: { opacity: 0, y: 4 },
   shown: { opacity: 1, y: 0, transition: { duration: DURATION.fast, ease: EASE_OUT } },
-  gone: { opacity: 0, y: -4, transition: { duration: DURATION.fast, ease: EASE_IN_OUT } },
 }

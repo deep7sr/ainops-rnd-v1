@@ -10,13 +10,15 @@ import {
   Sparkles,
   TriangleAlert,
 } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { HintCase } from '@/api'
 import { JsonView } from '@/components/json-view'
 import { SkillBadge } from '@/features/skills/skill-badges'
 import { StepText } from '@/features/skills/step-text'
 import { Badge } from '@/components/ui/badge'
+import { slideUp } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import type { Step } from './derive'
 import { formatMs } from './format'
@@ -35,7 +37,7 @@ function argText(args: Record<string, unknown>): string {
 function SkillItem({ step, last }: { step: Step; last: boolean }) {
   const steps = Array.isArray(step.data) ? (step.data as string[]) : []
   return (
-    <li className="flex gap-3">
+    <StepRow>
       <div className="flex flex-col items-center">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-provenance-ai/40 bg-secondary text-provenance-ai">
           <BookOpenCheck aria-hidden="true" className="size-4" />
@@ -75,7 +77,16 @@ function SkillItem({ step, last }: { step: Step; last: boolean }) {
           </ol>
         </div>
       </div>
-    </li>
+    </StepRow>
+  )
+}
+
+/** One step of the timeline. A step that arrives while you watch slides in. */
+function StepRow({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <motion.li id={id} variants={slideUp} initial="hidden" animate="shown" className="flex gap-3">
+      {children}
+    </motion.li>
   )
 }
 
@@ -84,7 +95,7 @@ const WORKED = { yes: ' (it worked)', no: ' (it did not work)', unknown: '' } as
 /** AINOPS's own check before answering: an unproven root cause was sent back to be checked. */
 function RecheckItem({ step, last }: { step: Step; last: boolean }) {
   return (
-    <li className="flex gap-3">
+    <StepRow>
       <div className="flex flex-col items-center">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-status-warning-border bg-status-warning-bg text-status-warning">
           <SearchCheck aria-hidden="true" className="size-4" />
@@ -95,7 +106,7 @@ function RecheckItem({ step, last }: { step: Step; last: boolean }) {
         <p className="text-sm font-medium">{step.sentence}</p>
         <p className="text-xs text-muted-foreground">{step.summary}</p>
       </div>
-    </li>
+    </StepRow>
   )
 }
 
@@ -103,7 +114,7 @@ function RecheckItem({ step, last }: { step: Step; last: boolean }) {
 function HintsItem({ step, last }: { step: Step; last: boolean }) {
   const cases = Array.isArray(step.data) ? (step.data as HintCase[]) : []
   return (
-    <li className="flex gap-3">
+    <StepRow>
       <div className="flex flex-col items-center">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-dashed border-muted-foreground/60 bg-background text-muted-foreground">
           <Lightbulb aria-hidden="true" className="size-4" />
@@ -149,7 +160,7 @@ function HintsItem({ step, last }: { step: Step; last: boolean }) {
           </ul>
         )}
       </div>
-    </li>
+    </StepRow>
   )
 }
 
@@ -184,7 +195,7 @@ function StepItem({
   const trace = step.tool === 'trace_route' && step.state === 'ok' ? readTrace(step.data) : null
 
   return (
-    <li id={step.evidenceId ? `step-${step.evidenceId}` : undefined} className="flex gap-3">
+    <StepRow id={step.evidenceId ? `step-${step.evidenceId}` : undefined}>
       <div className="flex flex-col items-center">
         <span
           className={cn(
@@ -329,7 +340,7 @@ function StepItem({
             </div>
           )}
       </div>
-    </li>
+    </StepRow>
   )
 }
 
@@ -344,32 +355,35 @@ export function Timeline({
 }) {
   return (
     <ol aria-label="Investigation steps">
-      {steps.map((step, index) => (
-        <Fragment key={step.key}>
-          {/* The checks for a follow-up message start under a divider naming that message. */}
-          {step.turn > 1 && step.turn !== steps[index - 1]?.turn && (
-            <li className="my-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <span aria-hidden="true" className="h-px flex-1 bg-border" />
-              For your message {step.turn}
-              <span aria-hidden="true" className="h-px flex-1 bg-border" />
-            </li>
-          )}
-          {step.kind === 'skill' ? (
-            <SkillItem step={step} last={index === steps.length - 1} />
-          ) : step.kind === 'hints' ? (
-            <HintsItem step={step} last={index === steps.length - 1} />
-          ) : step.kind === 'recheck' ? (
-            <RecheckItem step={step} last={index === steps.length - 1} />
-          ) : (
-            <StepItem
-              step={step}
-              focused={focused !== null && focused === step.evidenceId}
-              last={index === steps.length - 1}
-              onSelectDevice={onSelectDevice}
-            />
-          )}
-        </Fragment>
-      ))}
+      {/* initial={false}: the steps already there when the page opens just appear. */}
+      <AnimatePresence initial={false}>
+        {steps.map((step, index) => (
+          <Fragment key={step.key}>
+            {/* The checks for a follow-up message start under a divider naming that message. */}
+            {step.turn > 1 && step.turn !== steps[index - 1]?.turn && (
+              <li className="my-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <span aria-hidden="true" className="h-px flex-1 bg-border" />
+                For your message {step.turn}
+                <span aria-hidden="true" className="h-px flex-1 bg-border" />
+              </li>
+            )}
+            {step.kind === 'skill' ? (
+              <SkillItem step={step} last={index === steps.length - 1} />
+            ) : step.kind === 'hints' ? (
+              <HintsItem step={step} last={index === steps.length - 1} />
+            ) : step.kind === 'recheck' ? (
+              <RecheckItem step={step} last={index === steps.length - 1} />
+            ) : (
+              <StepItem
+                step={step}
+                focused={focused !== null && focused === step.evidenceId}
+                last={index === steps.length - 1}
+                onSelectDevice={onSelectDevice}
+              />
+            )}
+          </Fragment>
+        ))}
+      </AnimatePresence>
     </ol>
   )
 }

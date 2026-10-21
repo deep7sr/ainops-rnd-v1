@@ -278,7 +278,7 @@ function DeviceBox({
           width={NODE_WIDTH + 12}
           height={NODE_HEIGHT + 12}
           rx={10}
-          className="animate-pulse fill-none stroke-primary stroke-2 motion-reduce:animate-none"
+          className="animate-pulse fill-none stroke-primary stroke-2 drop-shadow-[0_0_6px_var(--glow)] motion-reduce:animate-none"
         />
       )}
       <rect

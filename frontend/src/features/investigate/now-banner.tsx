@@ -7,7 +7,9 @@ import {
   Sparkles,
   TriangleAlert,
 } from 'lucide-react'
+import { motion } from 'motion/react'
 import { stepHeadline } from '@/features/skills/headline'
+import { crossFade } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { needsEvidence, type ActiveSkill, type Now, type Step } from './derive'
 import { formatMs } from './format'
@@ -15,6 +17,11 @@ import { ToolIcon } from './tool-icon'
 
 // One line that always says, in plain words, what the agent is doing right now and why. It is the
 // same step as the pulsing device on the map and the running step in the timeline.
+
+/** Changes whenever the banner says something new: a new check, thinking, the answer. */
+function nowKey(now: Now): string {
+  return now.kind === 'working' ? `working-${now.step.key}` : now.kind
+}
 
 /** The running tool's icon with a spinning ring around it. */
 function Working({ tool }: { tool: string }) {
@@ -97,7 +104,9 @@ export function NowBanner({
       aria-label="What the agent is doing now"
       aria-live="polite"
       className={cn(
-        'rounded-lg border px-4 py-3',
+        'rounded-lg border px-4 py-3 transition-shadow duration-(--motion-slow)',
+        now.kind === 'working' && 'glow',
+        now.kind === 'thinking' && 'ai-glow',
         now.kind === 'done'
           ? now.verdict.report.outcome === 'diagnosed'
             ? 'border-status-critical-border bg-status-critical-bg'
@@ -114,76 +123,84 @@ export function NowBanner({
         )}
       </p>
 
-      {now.kind === 'starting' && (
-        <p className="mt-1 flex items-center gap-2 text-[15px] font-medium">
-          <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
-          Reading the question and choosing the first check…
-        </p>
-      )}
-
-      {skill && (now.kind === 'working' || now.kind === 'thinking') && (
-        <SkillLine skill={skill} step={now.kind === 'working' ? now.step.skillStep : null} />
-      )}
-
-      {now.kind === 'working' && (
-        <div className="mt-1 space-y-1">
-          <p className="flex items-center gap-2 text-[15px] font-semibold">
-            <Working tool={now.step.tool} />
-            {now.step.sentence}
+      {/* What it is doing replaces what it did, in place: the new line fades in at once (no
+          waiting for the old one to fade out, so news such as "stopped" is never delayed). */}
+      <motion.div key={nowKey(now)} variants={crossFade} initial="hidden" animate="shown">
+        {now.kind === 'starting' && (
+          <p className="mt-1 flex items-center gap-2 text-[15px] font-medium">
+            <Loader2
+              aria-hidden="true"
+              className="size-4 animate-spin motion-reduce:animate-none"
+            />
+            Reading the question and choosing the first check…
           </p>
-          {now.step.why && (
-            <p className="flex items-start gap-1.5 pl-8 text-sm text-provenance-ai">
-              <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                <span className="font-semibold">Why: </span>
-                {now.step.why}
-              </span>
+        )}
+
+        {skill && (now.kind === 'working' || now.kind === 'thinking') && (
+          <SkillLine skill={skill} step={now.kind === 'working' ? now.step.skillStep : null} />
+        )}
+
+        {now.kind === 'working' && (
+          <div className="mt-1 space-y-1">
+            <p className="flex items-center gap-2 text-[15px] font-semibold">
+              <Working tool={now.step.tool} />
+              {now.step.sentence}
             </p>
-          )}
-        </div>
-      )}
+            {now.step.why && (
+              <p className="flex items-start gap-1.5 pl-8 text-sm text-provenance-ai">
+                <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">Why: </span>
+                  {now.step.why}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
 
-      {now.kind === 'thinking' && (
-        <div className="mt-1 space-y-1">
-          <p className="flex items-center gap-2 text-[15px] font-semibold text-provenance-ai">
-            <Sparkles aria-hidden="true" className="size-4 shrink-0" />
-            Reading the evidence and deciding the next step…
-          </p>
-          {now.last && (
-            <div className="pl-6 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Last result</span> ({now.last.sentence}
-              ): <Result step={now.last} />
-            </div>
-          )}
-        </div>
-      )}
+        {now.kind === 'thinking' && (
+          <div className="mt-1 space-y-1">
+            <p className="flex items-center gap-2 text-[15px] font-semibold text-provenance-ai">
+              <Sparkles aria-hidden="true" className="size-4 shrink-0" />
+              Reading the evidence and deciding the next step…
+            </p>
+            {now.last && (
+              <div className="pl-6 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Last result</span> (
+                {now.last.sentence}
+                ): <Result step={now.last} />
+              </div>
+            )}
+          </div>
+        )}
 
-      {now.kind === 'done' && (
-        <div className="mt-1 space-y-1">
-          <p className="text-[15px] font-semibold">
-            {now.verdict.report.outcome === 'diagnosed' && now.verdict.report.root_cause
-              ? `Root cause: ${now.verdict.report.root_cause}`
-              : now.verdict.report.summary}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {needsEvidence(now.verdict.report.outcome)
-              ? `${now.verdict.toolCalls} ${now.verdict.toolCalls === 1 ? 'check' : 'checks'} in ${formatMs(now.verdict.atMs)} · confidence ${now.verdict.confidence}${
-                  now.verdict.skillsUsed.length
-                    ? ` · skill ${now.verdict.skillsUsed.join(', ')}`
-                    : ''
-                }`
-              : now.verdict.report.outcome === 'refused'
-                ? 'Refused before running any check: AINOPS only reads the network'
-                : `Answered in ${formatMs(now.verdict.atMs)} without checking any device`}
-          </p>
-        </div>
-      )}
+        {now.kind === 'done' && (
+          <div className="mt-1 space-y-1">
+            <p className="text-[15px] font-semibold">
+              {now.verdict.report.outcome === 'diagnosed' && now.verdict.report.root_cause
+                ? `Root cause: ${now.verdict.report.root_cause}`
+                : now.verdict.report.summary}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {needsEvidence(now.verdict.report.outcome)
+                ? `${now.verdict.toolCalls} ${now.verdict.toolCalls === 1 ? 'check' : 'checks'} in ${formatMs(now.verdict.atMs)} · confidence ${now.verdict.confidence}${
+                    now.verdict.skillsUsed.length
+                      ? ` · skill ${now.verdict.skillsUsed.join(', ')}`
+                      : ''
+                  }`
+                : now.verdict.report.outcome === 'refused'
+                  ? 'Refused before running any check: AINOPS only reads the network'
+                  : `Answered in ${formatMs(now.verdict.atMs)} without checking any device`}
+            </p>
+          </div>
+        )}
 
-      {now.kind === 'stopped' && (
-        <p role="alert" className="mt-1 text-sm text-status-critical">
-          {now.message}
-        </p>
-      )}
+        {now.kind === 'stopped' && (
+          <p role="alert" className="mt-1 text-sm text-status-critical">
+            {now.message}
+          </p>
+        )}
+      </motion.div>
     </section>
   )
 }

@@ -159,7 +159,7 @@ function GraphView({ topology }: { topology: Topology }) {
   const link = topology.links.find((l) => l.key === selected)
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="rounded-lg border bg-card p-3">
+      <div className="rounded-lg border bg-card bg-dot-grid p-3">
         <NetworkMap topology={topology} selected={selected} onSelect={setSelected} />
       </div>
       <div className="rounded-lg border bg-card p-4">
