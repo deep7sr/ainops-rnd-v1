@@ -35,6 +35,38 @@ export function consoleLines(lines: string[], max = 5): string[] {
   return shown
 }
 
+/** The devices on the map that a result names, in the order it first names them. */
+export function devicesNamed(data: unknown, onMap: Iterable<string>): string[] {
+  const text = JSON.stringify(data) ?? ''
+  const at = (name: string) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return text.search(new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`))
+  }
+  return [...onMap]
+    .map((name) => ({ name, index: at(name) }))
+    .filter(({ index }) => index >= 0)
+    .sort((a, b) => a.index - b.index)
+    .map(({ name }) => name)
+}
+
+/** Each device's ports from its latest interfaces check (rows with a name and a status). */
+function portsOf(steps: Step[], onMap: Map<string, string>) {
+  const ports = new Map<string, { name: string; status: string }[]>()
+  for (const step of steps) {
+    if (step.tool !== 'get_interfaces' || step.state !== 'ok' || !Array.isArray(step.data)) continue
+    const device = deviceOfStep(step, onMap)
+    if (!device) continue
+    const rows = (step.data as unknown[]).flatMap((row) => {
+      const r = row as { name?: unknown; status?: unknown }
+      return typeof r.name === 'string' && typeof r.status === 'string'
+        ? [{ name: r.name, status: r.status }]
+        : []
+    })
+    ports.set(device, rows)
+  }
+  return ports
+}
+
 /** A catalog template with the call's arguments filled in, e.g. "ping {destination}". */
 export function fillCommand(template: string, args: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => {
@@ -85,5 +117,27 @@ export function agentWalk(
       verdict: problem ?? step.summary,
     }
   }
-  return { trail, at: last?.device ?? null, mode, console }
+  // One-off moments, only while the investigation runs and only for the latest step.
+  const fresh = running && latest && latest.state !== 'running' ? latest : null
+  const lookup =
+    fresh?.kind === 'tool' && fresh.server === 'topology' && fresh.state === 'ok'
+      ? { key: fresh.key, devices: devicesNamed(fresh.data, platforms.keys()) }
+      : null
+  const target = fresh?.kind === 'refused' ? fresh.args.device : null
+  const blocked =
+    fresh?.kind === 'refused'
+      ? {
+          key: fresh.key,
+          device: typeof target === 'string' && platforms.has(target) ? target : null,
+        }
+      : null
+  return {
+    trail,
+    at: last?.device ?? null,
+    mode,
+    console,
+    lookup,
+    blocked,
+    ports: portsOf(steps, platforms),
+  }
 }

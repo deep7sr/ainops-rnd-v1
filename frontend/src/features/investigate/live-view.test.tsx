@@ -147,7 +147,15 @@ describe('the path and the pings in motion', () => {
 
   it('plays a ping answer once while the investigation runs, never when it is reopened', () => {
     const view = deriveInvestigation(recorded('healthy-baseline'), NAMES)
-    const thinking: AgentWalk = { trail: [], at: null, mode: 'thinking', console: null }
+    const thinking: AgentWalk = {
+      trail: [],
+      at: null,
+      mode: 'thinking',
+      console: null,
+      lookup: null,
+      blocked: null,
+      ports: new Map(),
+    }
     const live = render(
       <NetworkMap
         topology={TOPOLOGY}
@@ -178,6 +186,15 @@ describe('answers that need no network', () => {
   it('show no map and no confidence', () => {
     expect(touchesNetwork(refused.steps)).toBe(false)
     expect(touchesNetwork(deriveInvestigation(events, NAMES).steps)).toBe(true)
+    // A command blocked on a device does show the map: it shows where the command was stopped.
+    const blocked: RunEvent = {
+      type: 'refused',
+      tool: 'configure_interface',
+      args: { device: 'IPLC-RTR-MAA' },
+      reason: 'AINOPS only reads the network',
+      at_ms: 5,
+    }
+    expect(touchesNetwork(deriveInvestigation([blocked], NAMES).steps)).toBe(true)
     render(<NowBanner now={refused.now} stepCount={refused.steps.length} />)
     expect(
       screen.getByText('Refused before running any check: AINOPS only reads the network'),

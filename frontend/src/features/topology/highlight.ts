@@ -69,6 +69,12 @@ export interface AgentWalk {
   /** checking: a tool is running. thinking: the AI is deciding the next step. resting: done. */
   mode: 'checking' | 'thinking' | 'resting'
   console: AgentConsole | null
+  /** The knowledge-graph answer that just came in, and the devices it names (in its order). */
+  lookup: { key: string; devices: string[] } | null
+  /** A command the safety check just blocked, and the device it was meant for (if on the map). */
+  blocked: { key: string; device: string | null } | null
+  /** Each device's ports from its latest interfaces check: up, down or admin-down. */
+  ports: Map<string, { name: string; status: string }[]>
 }
 
 export const NO_HIGHLIGHT: MapHighlight = {

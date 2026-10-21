@@ -63,9 +63,15 @@ export function needsEvidence(outcome: Report['outcome']): boolean {
   return outcome !== 'refused' && outcome !== 'answered'
 }
 
-/** The map appears once the agent uses a tool; a greeting or a refusal has nothing to show. */
+/**
+ * The map appears once the agent uses a tool, or tries a command on a device that the safety check
+ * blocks (the map then shows where it was stopped). A greeting, or a question refused as a whole,
+ * has nothing to show.
+ */
 export function touchesNetwork(steps: Step[]): boolean {
-  return steps.some((s) => s.kind === 'tool')
+  return steps.some(
+    (s) => s.kind === 'tool' || (s.kind === 'refused' && typeof s.args.device === 'string'),
+  )
 }
 
 /** What the agent is doing right now, for the "Now" line above the map. */

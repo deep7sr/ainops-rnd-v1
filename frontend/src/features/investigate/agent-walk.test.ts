@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandCatalog, GraphLink, RunEvent } from '@/api'
 import { routeBetween } from '@/features/topology/route'
-import { agentWalk, consoleLines, fillCommand } from './agent-walk'
+import { agentWalk, consoleLines, devicesNamed, fillCommand } from './agent-walk'
 import { deriveInvestigation } from './derive'
 
 // The fault-1 investigation recorded on the live lab: three graph lookups, then interface checks
@@ -144,6 +144,50 @@ describe('the agent on the map', () => {
   it('fills the catalog command with the arguments of the call', () => {
     expect(fillCommand('ping {destination}', { destination: '10.10.4.1' })).toBe('ping 10.10.4.1')
     expect(fillCommand('show interfaces {interface}', {})).toBe('show interfaces {interface}')
+  })
+})
+
+describe('moments on the map', () => {
+  it('a knowledge-graph answer names its devices, in its order, while it is the latest step', () => {
+    const walk = at(index('tool_result', 'E3')) // get_path
+    expect(walk.lookup?.devices).toEqual([
+      'CORE-SW-TRV',
+      'IPLC-RTR-TRV',
+      'IPLC-RTR-MAA',
+      'CORE-SW-MAA',
+    ])
+    expect(at(index('tool_call', 'E4')).lookup).toBeNull() // the next check started
+    expect(at(index('tool_result', 'E3'), false).lookup).toBeNull() // reopened: no replay
+  })
+
+  it('finds whole device names only', () => {
+    expect(devicesNamed({ text: 'CORE-SW-TRV2 and XCORE-SW-TRV' }, ['CORE-SW-TRV'])).toEqual([])
+    expect(devicesNamed([{ device: 'FWL-TRV' }, 'CORE-SW-TRV'], PLATFORMS.keys())).toEqual([
+      'FWL-TRV',
+      'CORE-SW-TRV',
+    ])
+  })
+
+  it('a blocked command is stopped at the device it was meant for', () => {
+    const refused = (device: string): RunEvent => ({
+      type: 'refused',
+      tool: 'configure_interface',
+      args: { device },
+      reason: 'AINOPS only reads the network',
+      at_ms: 10,
+    })
+    const blockedAt = (device: string) => {
+      const view = deriveInvestigation([refused(device)], [...PLATFORMS.keys()])
+      return agentWalk(view.steps, true, PLATFORMS, CATALOG).blocked
+    }
+    expect(blockedAt('IPLC-RTR-MAA')?.device).toBe('IPLC-RTR-MAA')
+    expect(blockedAt('NOT-A-DEVICE')).toMatchObject({ device: null }) // shown, but not on a box
+  })
+
+  it('remembers the ports of each device from its latest interfaces check', () => {
+    const ports = at(RECORDED.length, false).ports
+    expect([...ports.keys()]).toEqual(['CORE-SW-TRV', 'IPLC-RTR-TRV', 'IPLC-RTR-MAA'])
+    expect(ports.get('IPLC-RTR-MAA')).toContainEqual({ name: 'Fa2/0', status: 'admin-down' })
   })
 })
 

@@ -10,7 +10,7 @@ import type { GraphLink } from '@/api'
 import { DURATION, EASE_IN_OUT, EASE_OUT } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import type { AgentConsole, AgentWalk } from './highlight'
-import { NODE_HEIGHT, NODE_WIDTH, VIEW_HEIGHT, type Point } from './layout'
+import { NODE_HEIGHT, NODE_WIDTH, VIEW_HEIGHT, VIEW_WIDTH, type Point } from './layout'
 import { routeBetween } from './route'
 
 /** A console folds away this long after its result is in (the timeline keeps it). */
@@ -142,6 +142,113 @@ function Marker({ walk, positions, links }: AgentProps) {
   )
 }
 
+/** The knowledge graph answered: a blue wave goes over each device the answer names, in order. */
+function LookupSweep({
+  lookup,
+  positions,
+}: { lookup: { key: string; devices: string[] } } & Pick<AgentProps, 'positions'>) {
+  return (
+    <g key={lookup.key}>
+      {lookup.devices.map((device, i) => {
+        const p = positions.get(device)
+        if (!p) return null
+        return (
+          <motion.rect
+            key={device}
+            x={p.x - NODE_WIDTH / 2 - 5}
+            y={p.y - NODE_HEIGHT / 2 - 5}
+            width={NODE_WIDTH + 10}
+            height={NODE_HEIGHT + 10}
+            rx={10}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: [0, 0.9, 0], scale: [0.96, 1, 1.08] }}
+            transition={{ duration: 1.2, delay: i * 0.18, ease: EASE_OUT }}
+            className="origin-center fill-provenance-rule-bg/50 stroke-provenance-rule [transform-box:fill-box]"
+            strokeWidth={2}
+          />
+        )
+      })}
+    </g>
+  )
+}
+
+/** A write command the safety check blocked: it hits a shield at the device and stops there. */
+function BlockedShield({ at }: { at: Point }) {
+  // The shield sits on the top edge of the box, its label above it (never over the box).
+  const y = at.y - NODE_HEIGHT / 2 - 22
+  return (
+    <motion.g
+      initial={{ x: at.x, y: y - 40, opacity: 0 }}
+      animate={{ x: at.x, y: [y - 40, y, y - 10, y], opacity: 1 }}
+      transition={{ duration: 0.8, ease: EASE_OUT }}
+    >
+      <g transform="scale(1.5)">
+        <path
+          d="M0 -16l13 5v9c0 8-5.5 14-13 17-7.5-3-13-9-13-17v-9z"
+          className="fill-status-critical-bg stroke-status-critical drop-shadow-[0_0_6px_var(--glow)]"
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+        <path
+          d="M-5 -4l10 10M5 -4l-10 10"
+          className="stroke-status-critical"
+          strokeWidth={2.4}
+          strokeLinecap="round"
+        />
+      </g>
+      <g transform="translate(0, -44)">
+        <rect
+          x={-100}
+          y={-11}
+          width={200}
+          height={22}
+          rx={11}
+          className="fill-status-critical stroke-card"
+        />
+        <text
+          textAnchor="middle"
+          dominantBaseline="central"
+          className="fill-white text-[11.5px] font-semibold"
+        >
+          Blocked: AINOPS is read-only
+        </text>
+      </g>
+    </motion.g>
+  )
+}
+
+const PORT_CLASS: Record<string, string> = {
+  up: 'fill-status-healthy',
+  down: 'fill-status-critical',
+  'admin-down': 'fill-status-warning',
+}
+
+/** The ports of a checked device as small lights along the bottom of its box. */
+function PortLights({ at, ports }: { at: Point; ports: { name: string; status: string }[] }) {
+  const shown = ports.slice(0, 14)
+  const size = 5
+  const gap = 3
+  const right = at.x + NODE_WIDTH / 2 - 9
+  const y = at.y + NODE_HEIGHT / 2 - size - 4
+  return (
+    <g>
+      {shown.map((port, i) => (
+        <rect
+          key={port.name}
+          x={right - (shown.length - i) * (size + gap) + gap}
+          y={y}
+          width={size}
+          height={size}
+          rx={1.2}
+          className={PORT_CLASS[port.status] ?? 'fill-status-unknown'}
+        >
+          <title>{`${port.name}: ${port.status}`}</title>
+        </rect>
+      ))}
+    </g>
+  )
+}
+
 interface AgentProps {
   walk: AgentWalk
   positions: Map<string, Point>
@@ -152,12 +259,27 @@ interface AgentProps {
 export function AgentLayer(props: AgentProps) {
   const { walk, positions } = props
   const at = walk.at ? positions.get(walk.at) : undefined
+  // A blocked command meant for no device on the map is stopped in the middle of the map.
+  const shieldAt = walk.blocked
+    ? ((walk.blocked.device ? positions.get(walk.blocked.device) : undefined) ?? {
+        x: VIEW_WIDTH / 2,
+        y: VIEW_HEIGHT / 2,
+      })
+    : null
   return (
     <g aria-hidden="true" className="pointer-events-none">
+      {[...walk.ports].map(([device, ports]) => {
+        const p = positions.get(device)
+        return p ? <PortLights key={device} at={p} ports={ports} /> : null
+      })}
       <TrailLine {...props} />
+      {walk.lookup && (
+        <LookupSweep key={walk.lookup.key} lookup={walk.lookup} positions={positions} />
+      )}
       {at && walk.console?.state === 'running' && <ScanBorder at={at} />}
       <TrailNumbers {...props} />
       <Marker {...props} />
+      {walk.blocked && shieldAt && <BlockedShield key={walk.blocked.key} at={shieldAt} />}
     </g>
   )
 }
