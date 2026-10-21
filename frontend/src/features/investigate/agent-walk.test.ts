@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CommandCatalog, GraphLink, RunEvent } from '@/api'
 import { routeBetween } from '@/features/topology/route'
-import { agentWalk, fillCommand } from './agent-walk'
+import { agentWalk, consoleLines, fillCommand } from './agent-walk'
 import { deriveInvestigation } from './derive'
 
 // The fault-1 investigation recorded on the live lab: three graph lookups, then interface checks
@@ -112,6 +112,33 @@ describe('the agent on the map', () => {
     const view = deriveInvestigation(RECORDED.slice(0, index('tool_call', 'E4')), [])
     const walk = agentWalk(view.steps, true, new Map(), CATALOG)
     expect(walk.at).toBeNull()
+  })
+
+  it('keeps the console short: headings first, gaps marked', () => {
+    // The excerpt of `show ip interface` on IPLC-RTR-MAA with fault-1 on (simulator, 2026-10-21).
+    const excerpt = [
+      'FastEthernet0/0 is up, line protocol is up',
+      '  Internet address is 10.10.5.1/24',
+      '  Broadcast address is 255.255.255.255',
+      '  MTU is 1500 bytes',
+      '…',
+      'FastEthernet1/0 is administratively down, line protocol is down',
+      '…',
+      'FastEthernet2/0 is administratively down, line protocol is down',
+      '…',
+    ]
+    expect(consoleLines(excerpt, 5)).toEqual([
+      'FastEthernet0/0 is up, line protocol is up',
+      '  Internet address is 10.10.5.1/24',
+      '  Broadcast address is 255.255.255.255',
+      '…',
+      'FastEthernet1/0 is administratively down, line protocol is down',
+      '…',
+      'FastEthernet2/0 is administratively down, line protocol is down',
+      '…',
+    ])
+    expect(consoleLines(['a', '  b'])).toEqual(['a', '  b']) // short: whole
+    expect(consoleLines([])).toEqual([])
   })
 
   it('fills the catalog command with the arguments of the call', () => {

@@ -195,23 +195,25 @@ function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boo
       transition={{ duration: DURATION.base, ease: EASE_OUT }}
       className="overflow-hidden rounded-md border glass font-mono text-[11px] leading-[1.5]"
     >
-      <p className="flex items-center gap-1.5 border-b px-2.5 py-1 font-sans text-[10.5px] text-muted-foreground">
+      <p className="flex shrink-0 items-center gap-1.5 border-b px-2.5 py-1 font-sans text-[10.5px] text-muted-foreground">
         <SquareTerminal aria-hidden="true" className="size-3.5 text-provenance-ai" />
         <span className="font-semibold text-foreground">{console.device}</span>
         <span className="ml-auto">read-only command</span>
       </p>
-      <div className="space-y-px px-2.5 py-1.5">
+      <div className="min-h-0 space-y-px overflow-hidden px-2.5 py-1.5">
         <p className="break-all text-foreground">
           <span className="text-primary">{console.device}#</span>{' '}
           <Typed text={console.command} instant={instant} />
         </p>
+        {/* The output lines only where the map is wide enough: on a narrow map they would cover
+            the devices. The command and the verdict always show. */}
         {console.lines.map((line, i) => (
           <motion.p
             key={i}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: instant ? 0 : 0.15 + i * 0.05, duration: DURATION.fast }}
-            className="truncate whitespace-pre text-muted-foreground"
+            className="hidden truncate whitespace-pre text-muted-foreground @[34rem]:block"
           >
             {line}
           </motion.p>
@@ -232,7 +234,7 @@ function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boo
             ease: EASE_OUT,
           }}
           className={cn(
-            'flex items-start gap-1.5 border-t px-2.5 py-1.5 font-sans text-xs font-semibold',
+            'flex shrink-0 items-start gap-1.5 border-t px-2.5 py-1.5 font-sans text-xs font-semibold',
             verdict.className,
           )}
         >
@@ -277,12 +279,12 @@ export function AgentConsoleOverlay({
   const edge = at && at.y < VIEW_HEIGHT / 2 ? { bottom: '3%' } : { top: '3%' }
 
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+    <div aria-hidden="true" className="@container pointer-events-none absolute inset-0">
       <AnimatePresence>
         {shown && (
           <div
             key={console.key}
-            className="absolute z-10 w-[min(17rem,46%)]"
+            className="absolute z-10 flex max-h-[94%] w-[min(17rem,46%)] flex-col"
             style={{ left, ...edge }}
           >
             <ConsoleCard console={console} instant={instant} />

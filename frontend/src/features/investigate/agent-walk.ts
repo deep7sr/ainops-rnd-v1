@@ -14,6 +14,27 @@ function deviceOfStep(step: Step, onMap: Map<string, string>): string | null {
   return device && onMap.has(device) ? device : null
 }
 
+const GAP = '…'
+
+/**
+ * At most `max` lines of an excerpt for the console on the map, chosen like the excerpt itself:
+ * the lines that start a block (not indented) first, then the others, in their original order,
+ * with "…" wherever lines were left out.
+ */
+export function consoleLines(lines: string[], max = 5): string[] {
+  const real = lines.flatMap((line, i) => (line === GAP ? [] : [i]))
+  const headings = real.filter((i) => !/^\s/.test(lines[i]))
+  const details = real.filter((i) => /^\s/.test(lines[i]))
+  const keep = [...headings, ...details].slice(0, max).sort((a, b) => a - b)
+  const shown: string[] = []
+  keep.forEach((index, k) => {
+    if (index > (k === 0 ? 0 : keep[k - 1] + 1)) shown.push(GAP)
+    shown.push(lines[index])
+  })
+  if (keep.length > 0 && keep[keep.length - 1] < lines.length - 1) shown.push(GAP)
+  return shown
+}
+
 /** A catalog template with the call's arguments filled in, e.g. "ping {destination}". */
 export function fillCommand(template: string, args: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => {
@@ -52,7 +73,7 @@ export function agentWalk(
       key: step.key,
       device,
       command: step.evidence?.command ?? (template ? fillCommand(template, step.args) : ''),
-      lines: step.evidence?.excerpt ?? [],
+      lines: consoleLines(step.evidence?.excerpt ?? []),
       state:
         step.state === 'running'
           ? 'running'
