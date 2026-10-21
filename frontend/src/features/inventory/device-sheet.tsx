@@ -3,6 +3,7 @@ import { CircleCheck, CircleX, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api, type InventoryRow } from '@/api'
+import { DeviceGlyph } from '@/components/device-glyph'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -145,7 +146,10 @@ export function DeviceSheet({ name, onClose }: { name: string | null; onClose: (
     <Sheet open={name !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>{row?.name ?? name}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            {row && <DeviceGlyph deviceRole={row.role} className="size-7 text-primary" />}
+            {row?.name ?? name}
+          </SheetTitle>
           <SheetDescription>
             {row
               ? `${row.description || row.role} · ${row.site} ${row.site_name} · ${platformName(row.platform)}`

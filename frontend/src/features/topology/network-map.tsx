@@ -7,6 +7,7 @@
 import { CircleCheck, CircleX, Loader2, TriangleAlert } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import type { GraphDevice, GraphLink, Topology } from '@/api'
+import { DeviceGlyph } from '@/components/device-glyph'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
 import {
@@ -29,6 +30,9 @@ import {
   VIEW_WIDTH,
   type Point,
 } from './layout'
+
+/** Where a device's name starts in its box: after the picture of the device. */
+const GLYPH_SPACE = 40
 
 /** Index of the hop this link is on (0 = first hop of the path), or -1. */
 function hopIndex(link: GraphLink, path: string[]): number {
@@ -299,6 +303,20 @@ function DeviceBox({
                       : 'fill-card stroke-border',
         )}
       />
+      <DeviceGlyph
+        deviceRole={device.role}
+        x={8}
+        y={(NODE_HEIGHT - 26) / 2}
+        size={26}
+        className={cn(
+          'transition-colors duration-300',
+          fault
+            ? 'text-status-critical'
+            : checking || inPath || selected
+              ? 'text-primary'
+              : 'text-muted-foreground',
+        )}
+      />
       <foreignObject x={NODE_WIDTH - 24} y={7} width={17} height={17}>
         {fault ? (
           <TriangleAlert aria-hidden="true" className="size-4 text-status-critical" />
@@ -317,10 +335,10 @@ function DeviceBox({
           <CircleCheck aria-hidden="true" className="size-4 text-muted-foreground" />
         ) : null}
       </foreignObject>
-      <text x={11} y={23} className="fill-foreground text-[13px] font-semibold">
+      <text x={GLYPH_SPACE} y={23} className="fill-foreground text-[13px] font-semibold">
         {device.name}
       </text>
-      <foreignObject x={11} y={31} width={NODE_WIDTH - 20} height={18}>
+      <foreignObject x={GLYPH_SPACE} y={31} width={NODE_WIDTH - GLYPH_SPACE - 8} height={18}>
         <div
           className={cn(
             'truncate text-[11px] leading-[18px]',

@@ -11,9 +11,23 @@ import { stepHeadline } from '@/features/skills/headline'
 import { cn } from '@/lib/utils'
 import { needsEvidence, type ActiveSkill, type Now, type Step } from './derive'
 import { formatMs } from './format'
+import { ToolIcon } from './tool-icon'
 
 // One line that always says, in plain words, what the agent is doing right now and why. It is the
 // same step as the pulsing device on the map and the running step in the timeline.
+
+/** The running tool's icon with a spinning ring around it. */
+function Working({ tool }: { tool: string }) {
+  return (
+    <span className="relative flex size-6 shrink-0 items-center justify-center text-primary">
+      <Loader2
+        aria-hidden="true"
+        className="absolute size-6 animate-spin opacity-50 motion-reduce:animate-none"
+      />
+      <ToolIcon tool={tool} className="size-3.5" />
+    </span>
+  )
+}
 
 function Result({ step }: { step: Step }) {
   if (step.kind === 'refused') {
@@ -114,14 +128,11 @@ export function NowBanner({
       {now.kind === 'working' && (
         <div className="mt-1 space-y-1">
           <p className="flex items-center gap-2 text-[15px] font-semibold">
-            <Loader2
-              aria-hidden="true"
-              className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
-            />
+            <Working tool={now.step.tool} />
             {now.step.sentence}
           </p>
           {now.step.why && (
-            <p className="flex items-start gap-1.5 pl-6 text-sm text-provenance-ai">
+            <p className="flex items-start gap-1.5 pl-8 text-sm text-provenance-ai">
               <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 <span className="font-semibold">Why: </span>

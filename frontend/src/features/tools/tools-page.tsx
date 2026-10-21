@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { ToolIcon } from '@/features/investigate/tool-icon'
 
 const SERVER_INFO: Record<string, { label: string; icon: typeof Router; text: string }> = {
   network: {
@@ -131,7 +132,10 @@ function ToolDetail({ server, tool }: { server: string; tool: McpTool }) {
     <div className="space-y-5">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">{tool.title ?? tool.name}</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <ToolIcon tool={tool.name} className="size-5 text-primary" />
+            {tool.title ?? tool.name}
+          </h2>
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">{tool.name}</code>
           {tool.annotations?.readOnlyHint && (
             <Badge variant="outline" className="gap-1 text-status-healthy">
@@ -253,7 +257,10 @@ export function ToolsPage() {
                               active && 'bg-accent font-medium',
                             )}
                           >
-                            <span>{t.title ?? t.name}</span>
+                            <span className="flex min-w-0 items-center gap-2">
+                              <ToolIcon tool={t.name} className="text-primary" />
+                              {t.title ?? t.name}
+                            </span>
                             <code className="font-mono text-[11px] text-muted-foreground">
                               {t.name}
                             </code>

@@ -5,13 +5,10 @@ import {
   CircleX,
   Lightbulb,
   Loader2,
-  Network,
-  Router,
   SearchCheck,
   ShieldX,
   Sparkles,
   TriangleAlert,
-  type LucideIcon,
 } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router'
@@ -23,10 +20,9 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { Step } from './derive'
 import { formatMs } from './format'
+import { FALLBACK_TOOL_ICON, TOOL_ICON } from './tool-icons'
 import { readTrace } from './trace'
 import { TraceHops } from './trace-hops'
-
-const SERVER_ICON: Record<string, LucideIcon> = { topology: Network, network: Router }
 
 function argText(args: Record<string, unknown>): string {
   return Object.entries(args)
@@ -183,7 +179,7 @@ function StepItem({
   onSelectDevice?: (device: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const Icon = step.kind === 'refused' ? ShieldX : (SERVER_ICON[step.server] ?? Router)
+  const Icon = step.kind === 'refused' ? ShieldX : (TOOL_ICON[step.tool] ?? FALLBACK_TOOL_ICON)
   const details = argText(step.args)
   const trace = step.tool === 'trace_route' && step.state === 'ok' ? readTrace(step.data) : null
 

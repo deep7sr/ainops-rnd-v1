@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { CircleCheck, CircleX, Loader2, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react'
 import { api, type GraphDevice, type ToolHealth } from '@/api'
+import { DeviceGlyph } from '@/components/device-glyph'
 import { JsonView } from '@/components/json-view'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -115,7 +116,10 @@ export function DevicePanel({
         {device && (
           <>
             <SheetHeader>
-              <SheetTitle>{device.name}</SheetTitle>
+              <SheetTitle className="flex items-center gap-2">
+                <DeviceGlyph deviceRole={device.role} className="size-7 text-primary" />
+                {device.name}
+              </SheetTitle>
               <SheetDescription>
                 {device.description || device.role} · {device.site} ·{' '}
                 {device.platform === 'juniper_junos' ? 'Juniper Junos' : 'Cisco IOS'}

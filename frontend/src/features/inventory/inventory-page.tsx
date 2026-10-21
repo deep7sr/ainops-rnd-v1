@@ -3,6 +3,7 @@ import { Search, Server } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type DeviceState, type InventoryRow } from '@/api'
+import { DeviceGlyph } from '@/components/device-glyph'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -59,7 +60,12 @@ function Row({ row }: { row: InventoryRow }) {
           <span className="block text-xs text-muted-foreground">{row.description}</span>
         )}
       </td>
-      <td className="px-4 py-2.5 text-sm">{row.role}</td>
+      <td className="px-4 py-2.5 text-sm">
+        <span className="flex items-center gap-2">
+          <DeviceGlyph deviceRole={row.role} className="size-6 text-primary" />
+          {row.role}
+        </span>
+      </td>
       <td className="hidden px-4 py-2.5 text-sm md:table-cell">{platformName(row.platform)}</td>
       <td className="px-4 py-2.5">
         <DeviceStatusBadge status={row.status} />
