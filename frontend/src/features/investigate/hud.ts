@@ -45,10 +45,14 @@ export interface Hud {
   networkCalls: number
   /** Calls the safety rules stopped. */
   blocked: number
+  /** The MCP server a tool runs on right now. */
+  running: 'topology' | 'network' | null
+  /** The latest tool call: a new one sends a pulse along its wire. */
+  lastCall: { key: string; server: 'topology' | 'network' } | null
+  /** The latest step is a call the safety rules stopped. */
+  guardStopped: boolean
   /** AI tokens of the whole conversation; null in runs recorded before they were counted. */
   tokens: number | null
-  /** Time into the latest reply at the last event shown. */
-  elapsedMs: number
   suspects: Record<SuspectColumn, Suspect[]>
 }
 
@@ -110,13 +114,17 @@ function conversationTokens(events: RunEvent[]): number | null {
   return known ? done + (current ?? 0) : null
 }
 
-function elapsedOf(events: RunEvent[]): number {
+/**
+ * How far into the latest reply the last event with a time happened, and its index (-1: none).
+ * The page ticks the clock on from there while the reply runs.
+ */
+export function lastTime(events: RunEvent[]): { ms: number; index: number } {
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
-    if (event.type === 'message') return 0
-    if ('at_ms' in event && typeof event.at_ms === 'number') return event.at_ms
+    if (event.type === 'message') return { ms: 0, index: i }
+    if ('at_ms' in event && typeof event.at_ms === 'number') return { ms: event.at_ms, index: i }
   }
-  return 0
+  return { ms: 0, index: -1 }
 }
 
 function suspects(view: InvestigationView, onMap: Set<string>): Record<SuspectColumn, Suspect[]> {
@@ -154,6 +162,10 @@ function suspects(view: InvestigationView, onMap: Set<string>): Record<SuspectCo
   return board
 }
 
+function serverOf(step: Step): 'topology' | 'network' | null {
+  return step.server === 'topology' || step.server === 'network' ? step.server : null
+}
+
 export function deriveHud(
   view: InvestigationView,
   now: Now,
@@ -165,6 +177,8 @@ export function deriveHud(
   const tools = steps.filter((s) => s.kind === 'tool')
   const phase = phaseNow(now, turn)
   const lastResult = [...steps].reverse().find((s) => s.kind === 'tool' || s.kind === 'refused')
+  const lastCall = [...tools].reverse().find((s) => serverOf(s) !== null)
+  const last = steps[steps.length - 1]
   return {
     loop:
       now.kind === 'working'
@@ -184,8 +198,10 @@ export function deriveHud(
     topologyCalls: tools.filter((s) => s.server === 'topology').length,
     networkCalls: tools.filter((s) => s.server === 'network').length,
     blocked: steps.filter(isSafetyBlock).length,
+    running: now.kind === 'working' ? serverOf(now.step) : null,
+    lastCall: lastCall ? { key: lastCall.key, server: serverOf(lastCall)! } : null,
+    guardStopped: last !== undefined && isSafetyBlock(last),
     tokens: conversationTokens(events),
-    elapsedMs: elapsedOf(events),
     suspects: suspects(view, onMap),
   }
 }

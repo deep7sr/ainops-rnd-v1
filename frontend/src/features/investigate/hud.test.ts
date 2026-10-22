@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Report, RunEvent } from '@/api'
 import { deriveInvestigation } from './derive'
-import { deriveHud } from './hud'
+import { deriveHud, lastTime } from './hud'
 
 const DEVICES = [
   'ISP-TRV-1',
@@ -47,7 +47,6 @@ describe('the HUD of a recorded run (fault 1, Fa2/0 shut on IPLC-RTR-MAA)', () =
       devices: 3,
       blocked: 0,
       tokens: null, // recorded before tokens were counted
-      elapsedMs: 82297,
     })
     expect([...hud.visited]).toEqual(['understand', 'locate', 'check', 'reason', 'report'])
     expect(hud.suspects.cause).toEqual([{ device: 'IPLC-RTR-MAA', checking: false, note: 'Fa2/0' }])
@@ -71,11 +70,14 @@ describe('the HUD of a recorded run (fault 1, Fa2/0 shut on IPLC-RTR-MAA)', () =
     expect(hud.suspects.problem).toEqual([
       { device: 'IPLC-RTR-MAA', checking: false, note: 'Fa2/0 is administratively down (shut)' },
     ])
-    expect(hud.elapsedMs).toBe(54594)
+    expect(lastTime(upTo(19))).toEqual({ ms: 54594, index: 18 })
   })
 
   it('locating in the knowledge graph', () => {
-    expect(hudOf(upTo(9))).toMatchObject({ loop: 'act', phase: 'locate' })
+    const hud = hudOf(upTo(9))
+    expect(hud).toMatchObject({ loop: 'act', phase: 'locate', running: 'topology' })
+    expect(hud.lastCall).toEqual({ key: 'E3', server: 'topology' })
+    expect(hudOf(upTo(10)).running).toBeNull() // its result is back
   })
 
   it('reading the question', () => {
@@ -198,6 +200,8 @@ describe('what the counters count', () => {
       call('E3', 'get_interfaces', 'network', 'IPLC-RTR-TRV'),
     ])
     expect(hud).toMatchObject({ checks: 3, networkCalls: 3, commands: 1, evidence: 0, blocked: 1 })
+    expect(hud).toMatchObject({ running: 'network', guardStopped: false })
+    expect(hud.lastCall).toEqual({ key: 'E3', server: 'network' })
   })
 
   it('a refusal by a safety rule is blocked; the check limit is not', () => {
@@ -210,16 +214,20 @@ describe('what the counters count', () => {
       at_ms: 1,
     })
     expect(hudOf([started, refused('address'), refused('budget')]).blocked).toBe(1)
+    // The guard lights while the latest step is one it stopped.
+    expect(hudOf([started, refused('address')]).guardStopped).toBe(true)
+    expect(hudOf([started, refused('address'), refused('budget')]).guardStopped).toBe(false)
   })
 
-  it('the elapsed time starts again with each reply', () => {
+  it('the clock starts again with each reply', () => {
     const events: RunEvent[] = [
       started,
       thought(1, 1),
       { type: 'message', turn: 2, text: 'And MAA?', at: '' },
     ]
-    expect(hudOf(events.slice(0, 2)).elapsedMs).toBe(3)
-    expect(hudOf(events).elapsedMs).toBe(0)
+    expect(lastTime(events.slice(0, 2))).toEqual({ ms: 3, index: 1 })
+    expect(lastTime(events)).toEqual({ ms: 0, index: 2 })
+    expect(lastTime([])).toEqual({ ms: 0, index: -1 })
   })
 })
 

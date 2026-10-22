@@ -6,10 +6,7 @@ import {
   Loader2,
   Focus,
   Maximize2,
-  Network,
   Plus,
-  Router,
-  ShieldCheck,
   Sparkles,
   Square,
   FlaskConical,
@@ -29,11 +26,13 @@ import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
 import { conversationTurns, MAX_MESSAGES, type Turn } from './conversation'
-import { deriveInvestigation, isSafetyBlock, touchesNetwork, type Now } from './derive'
+import { deriveInvestigation, touchesNetwork, type Now } from './derive'
 import { DevicePanel } from './device-panel'
 import { OutcomeBadge, ReportCard } from './report-card'
 import { formatMs } from './format'
 import { agentWalk } from './agent-walk'
+import { AgentHud } from './agent-hud'
+import { deriveHud, lastTime } from './hud'
 import { NowBanner } from './now-banner'
 import { usePacedEvents } from './use-paced-events'
 import { Timeline } from './timeline'
@@ -499,9 +498,12 @@ function Run({ runId }: { runId: string }) {
     setFocused(id)
     document.getElementById(`step-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
-  const topologyCalls = view.steps.filter((s) => s.server === 'topology').length
-  const networkCalls = view.steps.filter((s) => s.server === 'network').length
-  const refusals = view.steps.filter(isSafetyBlock).length
+  // The agent at work: its loop, phases, counters and the system behind it (hud.ts).
+  const onMap = useMemo(() => new Set(deviceNames), [deviceNames])
+  const hud = deriveHud(view, now, events, onMap)
+  // The clock goes by the events as they arrive, not as the pacing shows them.
+  const timed = lastTime(stream.events)
+  const clock = { ms: timed.ms, arrivedAt: stream.arrivals[timed.index] ?? null }
   const device = topology.data?.devices.find((d) => d.name === panelDevice) ?? null
   const latest = turns[turns.length - 1]
   // The case events of the latest reply: drafted, updated, or not saved.
@@ -587,20 +589,6 @@ function Run({ runId }: { runId: string }) {
                   Click a device to see what was found on it.
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                {[
-                  { icon: Network, label: 'Topology MCP calls', value: topologyCalls },
-                  { icon: Router, label: 'Network MCP calls', value: networkCalls },
-                  { icon: ShieldCheck, label: 'Blocked by safety check', value: refusals },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="rounded-md border bg-card px-3 py-2">
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Icon aria-hidden="true" className="size-3.5" /> {label}
-                    </p>
-                    <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
-                  </div>
-                ))}
-              </div>
             </>
           )}
 
@@ -630,40 +618,51 @@ function Run({ runId }: { runId: string }) {
         </div>
       </div>
 
-      <aside
-        aria-label="Steps of the investigation"
-        className="min-h-0 overflow-y-auto bg-muted/30 px-5 py-5"
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
-            What the agent did, step by step
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {view.verdict && !waiting
-              ? `done in ${formatMs(view.verdict.atMs)}`
-              : running
-                ? 'live'
-                : ''}
-          </p>
+      <div className="flex min-h-0 flex-col bg-muted/30">
+        {/* Stays in view while the steps scroll under it. */}
+        <div className="shrink-0 px-5 pt-5">
+          <AgentHud
+            hud={hud}
+            running={running}
+            clock={clock}
+            deviceCount={topology.data?.devices.length ?? 0}
+          />
         </div>
+        <aside
+          aria-label="Steps of the investigation"
+          className="min-h-0 flex-1 overflow-y-auto px-5 py-5"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
+              What the agent did, step by step
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {view.verdict && !waiting
+                ? `done in ${formatMs(view.verdict.atMs)}`
+                : running
+                  ? 'live'
+                  : ''}
+            </p>
+          </div>
 
-        {view.steps.length === 0 && running && <Skeleton className="h-16 w-full" />}
+          {view.steps.length === 0 && running && <Skeleton className="h-16 w-full" />}
 
-        <Timeline
-          steps={view.steps}
-          focused={focused}
-          roles={roles}
-          onSelectDevice={setPanelDevice}
-        />
+          <Timeline
+            steps={view.steps}
+            focused={focused}
+            roles={roles}
+            onSelectDevice={setPanelDevice}
+          />
 
-        {running && view.steps.length > 0 && view.steps.every((s) => s.state !== 'running') && (
-          <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">
-            <Sparkles aria-hidden="true" className="size-3.5" />
-            Reading the evidence and deciding the next step…
-          </p>
-        )}
-        <div ref={bottom} />
-      </aside>
+          {running && view.steps.length > 0 && view.steps.every((s) => s.state !== 'running') && (
+            <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">
+              <Sparkles aria-hidden="true" className="size-3.5" />
+              Reading the evidence and deciding the next step…
+            </p>
+          )}
+          <div ref={bottom} />
+        </aside>
+      </div>
 
       <DevicePanel
         device={device}

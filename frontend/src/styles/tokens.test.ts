@@ -49,6 +49,8 @@ const TEXT_PAIRS: [string, string][] = [
   ['eyebrow', 'card'],
   ['eyebrow', 'sidebar'],
   ['lab-foreground', 'lab'],
+  // The phase the agent is in now (agent HUD): the page's background colour on violet.
+  ['background', 'provenance-ai'],
   // Status and provenance text sits on its own tinted background (badges) and directly on surfaces
   // (for example a coloured word in a table cell).
   ...['healthy', 'warning', 'critical', 'unknown'].flatMap((s) => [
