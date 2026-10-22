@@ -608,7 +608,14 @@ export type RunEvent =
   | { type: 'recheck'; blamed: string[]; at_ms: number }
   /** After a reply that found a root cause: its case was drafted or updated (or not saved). */
   | { type: 'case'; id?: string; status?: CaseStatus; error?: string }
-  | { type: 'thought'; text: string; tools: string[]; at_ms: number }
+  | {
+      type: 'thought'
+      text: string
+      tools: string[]
+      /** What this reply has cost so far (missing in older runs). */
+      tokens?: { input: number; output: number }
+      at_ms: number
+    }
   | {
       type: 'tool_call'
       id: string

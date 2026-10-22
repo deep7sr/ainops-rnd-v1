@@ -168,6 +168,8 @@ class AinopsMiddleware(AgentMiddleware):
                     "text": thought
                     or (reasoning.strip().split("\n")[0][:300] if reasoning else ""),
                     "tools": calls,
+                    # What this reply has cost so far, for the live counter (the report: the total).
+                    "tokens": {"input": self.run.tokens_in, "output": self.run.tokens_out},
                     "at_ms": self.run.elapsed_ms(),
                 }
             )

@@ -277,6 +277,26 @@ def test_tokens_of_every_step_are_counted() -> None:
     assert (run.tokens_in, run.tokens_out) == (350, 20)
 
 
+def test_each_thought_says_what_the_reply_has_cost_so_far() -> None:
+    events: list[dict[str, Any]] = []
+
+    async def keep(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    run = Investigation(question="Why?", emit=keep, tool_servers={})
+    middleware = AinopsMiddleware(run)
+    for used in (100, 250):
+        message = AIMessage(
+            content="Checking the next device.",
+            usage_metadata={"input_tokens": used, "output_tokens": 10, "total_tokens": used + 10},
+        )
+        asyncio.run(middleware.aafter_model({"messages": [message]}, None))
+    assert [e["tokens"] for e in events] == [
+        {"input": 100, "output": 10},
+        {"input": 350, "output": 20},
+    ]
+
+
 def test_the_report_carries_the_tokens(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _, _, final = _investigate(monkeypatch, tmp_path, Report(outcome="answered", summary="x"), None)
     assert final["tokens"] == {"input": 0, "output": 0}
