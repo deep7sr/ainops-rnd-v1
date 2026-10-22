@@ -223,6 +223,10 @@ platform. Read this whole note before doing anything. Then confirm the state wit
   Inventory "Check now" success path all wait for the Groq Developer key.
 
 ## Next steps (plan first, wait for "yes" each time)
+0. **Production architecture (2026-10-22, design only):** `docs/architecture-production.md`.
+   Postgres = system of record, Neo4j = rebuildable graph, pgvector later; topology at scale,
+   risks, how to prove the map is right, 7 phases after the demo. Open: embedding model (local
+   recommended), inventory source, map accuracy targets with Praveen.
 1. **When the Groq Developer key arrives:** work through `LIVE-TEST-CHECKLIST.md` (repo root,
    untracked, temporary). It covers the fault-1 diagnosis, the conversation tests, cases, the
    before/after hint measurement and the Inventory page. Then demo to Praveen.
