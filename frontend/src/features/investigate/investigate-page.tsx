@@ -35,6 +35,8 @@ import { agentWalk } from './agent-walk'
 import { AgentHud } from './agent-hud'
 import { deriveHud, lastTime } from './hud'
 import { SuspectBoard } from './suspect-board'
+import { pathStops } from './path-stops'
+import { PathStrip } from './path-strip'
 import { NowBanner } from './now-banner'
 import { usePacedEvents } from './use-paced-events'
 import { Timeline } from './timeline'
@@ -597,6 +599,11 @@ function Run({ runId }: { runId: string }) {
                     <Skeleton className="aspect-[1000/560] w-full" />
                   )}
                 </div>
+                <PathStrip
+                  stops={pathStops(view.highlight.path, lans.endpoints, lans.tags, roles)}
+                  states={view.highlight.states}
+                  faults={view.highlight.faultDevices}
+                />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Legend />
                   <p className="text-xs text-muted-foreground">
