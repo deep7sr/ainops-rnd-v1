@@ -89,6 +89,16 @@
   --color-lab-foreground: var(--lab-foreground);
   --color-eyebrow: var(--eyebrow);
 
+  /* AINOPS: the agent's console on the map, a dark terminal in both themes */
+  --color-terminal: var(--terminal);
+  --color-terminal-bar: var(--terminal-bar);
+  --color-terminal-foreground: var(--terminal-foreground);
+  --color-terminal-muted: var(--terminal-muted);
+  --color-terminal-command: var(--terminal-command);
+  --color-terminal-ok: var(--terminal-ok);
+  --color-terminal-warn: var(--terminal-warn);
+  --color-terminal-bad: var(--terminal-bad);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -102,6 +112,17 @@
 :root {
   /* Theme-independent: corner radius. Small on purpose: the UST brand uses square shapes. */
   --radius: 0.375rem;
+
+  /* Theme-independent: the agent's console is a dark terminal in both themes (the look of a
+     device's CLI). */
+  --terminal: #10181a;
+  --terminal-bar: #18262a;
+  --terminal-foreground: #d5e7e9;
+  --terminal-muted: #8fb5ba;
+  --terminal-command: #7fe3f0;
+  --terminal-ok: #8ee0a8;
+  --terminal-warn: #f5c76c;
+  --terminal-bad: #ff9b8f;
 
   --background: #ffffff;
   --foreground: #231f20; /* UST soft black */

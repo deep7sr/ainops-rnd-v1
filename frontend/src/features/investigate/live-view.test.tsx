@@ -376,7 +376,47 @@ describe('the agent console', () => {
       />,
     ).container
 
-  it('sits under the map, never over a device', () => {
+  /** The map measured this many pixels wide (jsdom has no layout: the test says it). */
+  const measured = (pixels: number) => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        seen: (entries: { contentRect: { width: number } }[]) => void
+        constructor(seen: (entries: { contentRect: { width: number } }[]) => void) {
+          this.seen = seen
+        }
+        observe() {
+          this.seen([{ contentRect: { width: pixels } }])
+        }
+        disconnect() {}
+      },
+    )
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('pops out next to its device on a measured map, covering no device that matters', () => {
+    measured(830)
+    const map = mapWith(walk({}))
+    const line = [...map.querySelectorAll('p')].find(
+      (p) => p.textContent === '% Network not in table',
+    )
+    const box = line?.closest('.absolute') as HTMLElement
+    expect(box).not.toBeNull()
+    expect(box.style.left).toMatch(/%$/)
+    expect(box.style.width).toBe('300px')
+    expect(map.querySelector('.h-48')).toBeNull() // no strip under the map
+    // A dashed line from the device to its console.
+    expect(map.querySelector('line[stroke-dasharray="3 4"]')).not.toBeNull()
+  })
+
+  it('goes under the map when the map is too small for it', () => {
+    measured(200)
+    const map = mapWith(walk({}))
+    expect(map.querySelector('.h-48')?.textContent).toContain('% Network not in table')
+    expect(map.querySelector('line[stroke-dasharray="3 4"]')).toBeNull()
+  })
+
+  it('sits under the map until the map is measured, never over a device', () => {
     // 2026-10-22: docked over the map, it hid ISP-TRV-1 and the site name.
     const map = mapWith(walk({}))
     const line = [...map.querySelectorAll('p')].find(

@@ -18,6 +18,14 @@ const THEME_INDEPENDENT = new Set([
   '--motion-slow',
   '--motion-ease-out',
   '--motion-ease-in-out',
+  '--terminal',
+  '--terminal-bar',
+  '--terminal-foreground',
+  '--terminal-muted',
+  '--terminal-command',
+  '--terminal-ok',
+  '--terminal-warn',
+  '--terminal-bad',
 ])
 
 // WCAG 2.1 AA: 4.5:1 for normal text (1.4.3), 3:1 for UI parts such as focus rings (1.4.11).
@@ -49,6 +57,13 @@ const TEXT_PAIRS: [string, string][] = [
   ['eyebrow', 'card'],
   ['eyebrow', 'sidebar'],
   ['lab-foreground', 'lab'],
+  // The agent's console: a dark terminal.
+  ...['foreground', 'muted', 'command', 'ok', 'warn', 'bad'].map((t): [string, string] => [
+    `terminal-${t}`,
+    'terminal',
+  ]),
+  ['terminal-muted', 'terminal-bar'],
+  ['terminal-foreground', 'terminal-bar'],
   // Device names on the cards of the suspect board.
   ['foreground', 'status-healthy-bg'],
   ['foreground', 'status-warning-bg'],

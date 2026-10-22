@@ -5,13 +5,15 @@
 // Colour is never the only signal: states also have icons, labels and line styles.
 
 import { CircleCheck, CircleX, Loader2, TriangleAlert } from 'lucide-react'
-import { motion } from 'motion/react'
-import { useId, type CSSProperties } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { useId, useRef, type CSSProperties } from 'react'
 import type { GraphDevice, GraphLink, Topology } from '@/api'
 import { DeviceGlyph } from '@/components/device-glyph'
+import { useElementWidth } from '@/hooks/use-element-width'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
-import { AgentBeneath, AgentConsoleStrip, AgentLayer } from './agent-layer'
+import { AgentBeneath, AgentConsoleStrip, AgentLayer, ConsoleCard } from './agent-layer'
+import { consoleSpot, keepClear, nearestPoint } from './console-spot'
 import {
   boxIssue,
   NO_HIGHLIGHT,
@@ -263,6 +265,9 @@ function LinkLine({
     </g>
   )
 }
+
+/** The console's size on screen when it pops out on the map. */
+const CONSOLE_PX = { width: 300, height: 184 }
 
 interface PingNote {
   device: string
@@ -681,6 +686,23 @@ export function NetworkMap({
     (focus ?? []).map((name) => positions.get(name)).filter((p): p is Point => !!p),
   )
   const viewBox = `${view.x} ${view.y} ${view.width} ${view.height}`
+  // The console pops out next to the device it runs on, where it covers no device that matters;
+  // with no such spot (or before the map is measured) it sits under the map.
+  const svg = useRef<SVGSVGElement>(null)
+  const pixels = useElementWidth(svg)
+  const unit = pixels ? view.width / pixels : null
+  const consoleOn = agent !== null && agent.mode !== 'resting'
+  const consoleAt = consoleOn && agent.console ? positions.get(agent.console.device) : undefined
+  const spot =
+    consoleAt && unit && agent?.console
+      ? consoleSpot(
+          consoleAt,
+          { width: CONSOLE_PX.width * unit, height: CONSOLE_PX.height * unit },
+          view,
+          keepClear(agent.console.device, positions, highlight, lanAt, lans?.tags ?? new Map()),
+        )
+      : null
+  const strip = consoleOn && (unit === null || (agent.console !== null && spot === null))
   // The latest answered ping is written in a device box: in the target's box when it replied, in
   // the sender's box when it did not (a ping alone does not tell where the packet was lost).
   const answered = highlight.pings.filter((p) => p.ok !== null).at(-1)
@@ -699,6 +721,7 @@ export function NetworkMap({
   return (
     <div className="relative">
       <motion.svg
+        ref={svg}
         initial={false}
         animate={{ viewBox }}
         transition={{ duration: reducedMotion ? 0 : 0.9, ease: [0.65, 0, 0.35, 1] }}
@@ -825,10 +848,42 @@ export function NetworkMap({
         {agent && (
           <AgentLayer walk={agent} positions={positions} links={topology.links} ids={ids} />
         )}
+        {spot && consoleAt && (
+          // A thin line from the device to its console.
+          <line
+            aria-hidden="true"
+            x1={edgePoint(consoleAt, nearestPoint(spot, consoleAt)).x}
+            y1={edgePoint(consoleAt, nearestPoint(spot, consoleAt)).y}
+            x2={nearestPoint(spot, consoleAt).x}
+            y2={nearestPoint(spot, consoleAt).y}
+            strokeWidth={1.5}
+            strokeDasharray="3 4"
+            className="stroke-ring"
+          />
+        )}
       </motion.svg>
-      {agent && agent.mode !== 'resting' && (
-        <AgentConsoleStrip console={agent.console} instant={reducedMotion} />
-      )}
+      <AnimatePresence>
+        {spot && agent?.console && (
+          <motion.div
+            key={agent.console.key}
+            aria-hidden="true"
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.2, 1.3, 0.4, 1] }}
+            className="pointer-events-none absolute z-10"
+            style={{
+              left: `${((spot.x - view.x) / view.width) * 100}%`,
+              top: `${((spot.y - view.y) / view.height) * 100}%`,
+              width: CONSOLE_PX.width,
+              height: CONSOLE_PX.height,
+            }}
+          >
+            <ConsoleCard console={agent.console} instant={reducedMotion} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {strip && <AgentConsoleStrip console={agent.console} instant={reducedMotion} />}
     </div>
   )
 }

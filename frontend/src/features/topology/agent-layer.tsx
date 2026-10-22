@@ -340,30 +340,37 @@ function Typed({ text, instant }: { text: string; instant: boolean }) {
 }
 
 const VERDICT = {
-  ok: { icon: CircleCheck, className: 'text-status-healthy' },
-  problem: { icon: TriangleAlert, className: 'text-status-warning' },
-  error: { icon: CircleX, className: 'text-status-critical' },
-  not_run: { icon: CircleSlash, className: 'text-muted-foreground' },
+  ok: { icon: CircleCheck, className: 'border-terminal-ok/50 bg-terminal-ok/15 text-terminal-ok' },
+  problem: {
+    icon: TriangleAlert,
+    className: 'border-terminal-warn/50 bg-terminal-warn/15 text-terminal-warn',
+  },
+  error: {
+    icon: CircleX,
+    className: 'border-terminal-bad/50 bg-terminal-bad/15 text-terminal-bad',
+  },
+  not_run: {
+    icon: CircleSlash,
+    className: 'border-terminal-muted/50 bg-terminal-muted/10 text-terminal-muted',
+  },
 } as const
 
-function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boolean }) {
+/** The console: a dark terminal with the command typed, the device's first lines, the verdict. */
+export function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boolean }) {
   const verdict = console.state === 'running' ? null : VERDICT[console.state]
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DURATION.base, ease: EASE_OUT }}
-      className="flex h-full flex-col overflow-hidden rounded-md border glass font-mono text-[11px] leading-[1.5]"
-    >
-      <p className="flex shrink-0 items-center gap-1.5 border-b px-2.5 py-1 font-sans text-[10.5px] text-muted-foreground">
-        <SquareTerminal aria-hidden="true" className="size-3.5 text-provenance-ai" />
-        <span className="font-semibold text-foreground">{console.device}</span>
+    <div className="flex h-full flex-col overflow-hidden rounded-[9px] bg-terminal font-mono text-[11px] leading-[1.5] text-terminal-foreground shadow-[0_10px_30px_rgb(0_0_0/0.28),0_0_0_1px_rgb(0_151_172/0.4)]">
+      <p className="flex shrink-0 items-center gap-1.5 bg-terminal-bar px-2.5 py-1 text-[10.5px] text-terminal-muted">
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-terminal-ok" />
+        <span className="font-semibold text-terminal-foreground">{console.device}</span> console
         <span className="ml-auto">read-only command</span>
       </p>
       <div className="min-h-0 flex-1 space-y-px overflow-hidden px-2.5 py-1.5">
-        <p className="break-all text-foreground">
-          <span className="text-primary">{console.device}#</span>{' '}
-          <Typed text={console.command} instant={instant} />
+        <p className="break-all">
+          <span className="text-terminal-muted">{console.device}#</span>{' '}
+          <span className="text-terminal-command">
+            <Typed text={console.command} instant={instant} />
+          </span>
         </p>
         {console.lines.map((line, i) => (
           <motion.p
@@ -372,30 +379,31 @@ function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boo
             animate={{ opacity: 1 }}
             transition={{ delay: instant ? 0 : 0.15 + i * 0.05, duration: DURATION.fast }}
             className={cn(
-              'truncate whitespace-pre text-muted-foreground',
-              line === '…' && 'text-[10px] leading-[0.8] opacity-60',
+              'truncate whitespace-pre',
+              line === '…' && 'text-[10px] leading-[0.8] text-terminal-muted',
             )}
           >
             {line}
           </motion.p>
         ))}
         {console.state === 'running' && (
-          <p className="animate-pulse text-muted-foreground motion-reduce:animate-none">
+          <p className="animate-pulse text-terminal-muted motion-reduce:animate-none">
             waiting for the device…
           </p>
         )}
       </div>
       {verdict && (
+        // The verdict is stamped on, like the mock-up's stamp.
         <motion.p
-          initial={{ opacity: 0, scale: 1.15 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, scale: 1.6, rotate: -6 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
           transition={{
             delay: instant ? 0 : 0.2 + console.lines.length * 0.05,
             duration: DURATION.base,
-            ease: EASE_OUT,
+            ease: [0.2, 1.6, 0.4, 1],
           }}
           className={cn(
-            'flex shrink-0 items-start gap-1.5 border-t px-2.5 py-1.5 font-sans text-xs font-semibold',
+            'mx-2.5 mb-2 flex shrink-0 items-start gap-1.5 self-start rounded border px-2 py-0.5 font-sans text-xs font-semibold',
             verdict.className,
           )}
         >
@@ -403,7 +411,7 @@ function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boo
           <span className="line-clamp-2">{console.verdict}</span>
         </motion.p>
       )}
-    </motion.div>
+    </div>
   )
 }
 
@@ -423,7 +431,15 @@ export function AgentConsoleStrip({
   return (
     <div aria-hidden="true" className="mt-2 h-48">
       {console ? (
-        <ConsoleCard key={console.key} console={console} instant={instant} />
+        <motion.div
+          key={console.key}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DURATION.base, ease: EASE_OUT }}
+          className="h-full"
+        >
+          <ConsoleCard console={console} instant={instant} />
+        </motion.div>
       ) : (
         <p className="flex h-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground">
           <SquareTerminal aria-hidden="true" className="size-3.5 text-provenance-ai" />
