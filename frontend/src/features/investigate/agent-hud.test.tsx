@@ -20,6 +20,7 @@ const HUD: Hud = {
   running: null,
   lastCall: { key: 'E3', server: 'topology' },
   guardStopped: false,
+  skillReached: 0,
   tokens: 21400,
   suspects: { todo: [], healthy: [], problem: [], cause: [] },
 }

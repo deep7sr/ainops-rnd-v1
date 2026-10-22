@@ -33,6 +33,7 @@ import { formatMs } from './format'
 import { agentWalk } from './agent-walk'
 import { AgentHud } from './agent-hud'
 import { deriveHud, lastTime } from './hud'
+import { SuspectBoard } from './suspect-board'
 import { NowBanner } from './now-banner'
 import { usePacedEvents } from './use-paced-events'
 import { Timeline } from './timeline'
@@ -545,7 +546,12 @@ function Run({ runId }: { runId: string }) {
           ))}
           {latest && <MessageBubble turn={latest} />}
 
-          <NowBanner now={now} stepCount={view.steps.length} skill={view.skill} />
+          <NowBanner
+            now={now}
+            stepCount={view.steps.length}
+            skill={view.skill}
+            skillReached={hud.skillReached}
+          />
 
           {/* The map appears once the agent looks at the network: a greeting or a refusal has
               nothing to show on it. It keeps everything checked in the whole conversation. */}
@@ -589,6 +595,7 @@ function Run({ runId }: { runId: string }) {
                   Click a device to see what was found on it.
                 </p>
               </div>
+              <SuspectBoard board={hud.suspects} roles={roles} onSelect={setPanelDevice} />
             </>
           )}
 

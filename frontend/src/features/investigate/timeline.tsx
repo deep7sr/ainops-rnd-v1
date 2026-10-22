@@ -20,7 +20,7 @@ import { JsonView } from '@/components/json-view'
 import { SkillBadge } from '@/features/skills/skill-badges'
 import { StepText } from '@/features/skills/step-text'
 import { Badge } from '@/components/ui/badge'
-import { slideUp } from '@/lib/motion'
+import { DURATION, EASE_OUT, slideUp } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { isSafetyBlock, type Step } from './derive'
 import { formatMs } from './format'
@@ -44,7 +44,7 @@ function SkillItem({ step, last }: { step: Step; last: boolean }) {
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-provenance-ai/40 bg-secondary text-provenance-ai">
           <BookOpenCheck aria-hidden="true" className="size-4" />
         </span>
-        {!last && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
+        {!last && <Connector filled />}
       </div>
       <div className="mb-3 min-w-0 flex-1 rounded-md border border-transparent px-3 py-2.5">
         <p className="text-sm font-medium">{step.sentence}</p>
@@ -83,6 +83,23 @@ function SkillItem({ step, last }: { step: Step; last: boolean }) {
   )
 }
 
+/**
+ * The line down to the next step: it grows in teal when the next step arrives (once this one is
+ * done). The steps already there when the page opened have theirs drawn (see Timeline).
+ */
+function Connector({ filled }: { filled: boolean }) {
+  return (
+    <span aria-hidden="true" className="relative w-px flex-1 bg-border">
+      <motion.span
+        className="absolute inset-0 origin-top bg-primary/60"
+        initial={{ scaleY: 0 }}
+        animate={{ scaleY: filled ? 1 : 0 }}
+        transition={{ duration: DURATION.slow, ease: EASE_OUT }}
+      />
+    </span>
+  )
+}
+
 /** One step of the timeline. A step that arrives while you watch slides in. */
 function StepRow({ id, children }: { id?: string; children: ReactNode }) {
   return (
@@ -102,7 +119,7 @@ function RecheckItem({ step, last }: { step: Step; last: boolean }) {
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-status-warning-border bg-status-warning-bg text-status-warning">
           <SearchCheck aria-hidden="true" className="size-4" />
         </span>
-        {!last && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
+        {!last && <Connector filled />}
       </div>
       <div className="mb-3 min-w-0 flex-1 px-3 py-2.5">
         <p className="text-sm font-medium">{step.sentence}</p>
@@ -121,7 +138,7 @@ function HintsItem({ step, last }: { step: Step; last: boolean }) {
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-dashed border-muted-foreground/60 bg-background text-muted-foreground">
           <Lightbulb aria-hidden="true" className="size-4" />
         </span>
-        {!last && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
+        {!last && <Connector filled />}
       </div>
       <div className="mb-3 min-w-0 flex-1 px-3 py-2.5">
         <p className="text-sm font-medium">{step.sentence}</p>
@@ -231,7 +248,7 @@ function StepItem({
         >
           <Icon aria-hidden="true" className="size-4" />
         </span>
-        {!last && <span aria-hidden="true" className="w-px flex-1 bg-border" />}
+        {!last && <Connector filled={step.state !== 'running'} />}
       </div>
 
       <div

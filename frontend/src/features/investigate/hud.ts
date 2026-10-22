@@ -51,6 +51,8 @@ export interface Hud {
   lastCall: { key: string; server: 'topology' | 'network' } | null
   /** The latest step is a call the safety rules stopped. */
   guardStopped: boolean
+  /** The highest step of the open skill a check carried out in the latest reply (0: none). */
+  skillReached: number
   /** AI tokens of the whole conversation; null in runs recorded before they were counted. */
   tokens: number | null
   suspects: Record<SuspectColumn, Suspect[]>
@@ -201,6 +203,7 @@ export function deriveHud(
     running: now.kind === 'working' ? serverOf(now.step) : null,
     lastCall: lastCall ? { key: lastCall.key, server: serverOf(lastCall)! } : null,
     guardStopped: last !== undefined && isSafetyBlock(last),
+    skillReached: Math.max(0, ...turn.map((s) => s.skillStep ?? 0)),
     tokens: conversationTokens(events),
     suspects: suspects(view, onMap),
   }

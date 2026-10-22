@@ -49,6 +49,10 @@ const TEXT_PAIRS: [string, string][] = [
   ['eyebrow', 'card'],
   ['eyebrow', 'sidebar'],
   ['lab-foreground', 'lab'],
+  // Device names on the cards of the suspect board.
+  ['foreground', 'status-healthy-bg'],
+  ['foreground', 'status-warning-bg'],
+  ['foreground', 'status-critical-bg'],
   // The phase the agent is in now (agent HUD): the page's background colour on violet.
   ['background', 'provenance-ai'],
   // Status and provenance text sits on its own tinted background (badges) and directly on surfaces

@@ -11,6 +11,7 @@ import {
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { stepHeadline } from '@/features/skills/headline'
+import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { crossFade } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { isSafetyBlock, needsEvidence, type ActiveSkill, type Now, type Step } from './derive'
@@ -106,10 +107,73 @@ function Result({ step }: { step: Step }) {
   )
 }
 
-/** Which expert skill the agent follows, and which of its steps the current check is. */
-function SkillLine({ skill, step }: { skill: ActiveSkill; step: number | null }) {
+/**
+ * The "why" of the running check, typed out as the AI's own words arrive. Screen readers get the
+ * whole sentence at once; with reduced motion it is all there at once.
+ */
+function Typed({ text }: { text: string }) {
+  const reduced = usePrefersReducedMotion()
+  const [count, setCount] = useState(0)
+  const done = reduced || count >= text.length
+  useEffect(() => {
+    if (done) return
+    const timer = setInterval(() => setCount((c) => c + 2), 20)
+    return () => clearInterval(timer)
+  }, [done])
   return (
-    <p className="mt-1 flex items-start gap-1.5 text-sm text-provenance-ai">
+    <>
+      <span aria-hidden="true">
+        {done ? text : text.slice(0, count)}
+        {!done && (
+          <span className="ml-px inline-block h-3.5 w-1.5 translate-y-0.5 bg-provenance-ai/70" />
+        )}
+      </span>
+      <span className="sr-only">{text}</span>
+    </>
+  )
+}
+
+/** The steps of the skill as a rail: done, the one being carried out, still to do. */
+function SkillRail({
+  total,
+  reached,
+  current,
+}: {
+  total: number
+  reached: number
+  current: number | null
+}) {
+  return (
+    <span aria-hidden="true" className="mt-1 flex gap-0.5">
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={cn(
+            'h-1 w-5 rounded-full',
+            current === i + 1
+              ? 'animate-pulse bg-provenance-ai motion-reduce:animate-none'
+              : i < reached
+                ? 'bg-provenance-ai/60'
+                : 'bg-border',
+          )}
+        />
+      ))}
+    </span>
+  )
+}
+
+/** Which expert skill the agent follows, and which of its steps the current check is. */
+function SkillLine({
+  skill,
+  step,
+  reached,
+}: {
+  skill: ActiveSkill
+  step: number | null
+  reached: number
+}) {
+  return (
+    <div className="mt-1 flex items-start gap-1.5 text-sm text-provenance-ai">
       <BookOpenCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span>
         Following skill <span className="font-mono font-semibold">{skill.name}</span>
@@ -120,8 +184,11 @@ function SkillLine({ skill, step }: { skill: ActiveSkill; step: number | null })
           </>
         )}
         {step === 0 && ' · going beyond its steps'}
+        {skill.steps.length > 0 && (
+          <SkillRail total={skill.steps.length} reached={reached} current={step} />
+        )}
       </span>
-    </p>
+    </div>
   )
 }
 
@@ -129,10 +196,13 @@ export function NowBanner({
   now,
   stepCount,
   skill = null,
+  skillReached = 0,
 }: {
   now: Now
   stepCount: number
   skill?: ActiveSkill | null
+  /** The highest step of the skill a check carried out in this reply. */
+  skillReached?: number
 }) {
   return (
     <section
@@ -173,7 +243,11 @@ export function NowBanner({
         )}
 
         {skill && (now.kind === 'working' || now.kind === 'thinking') && (
-          <SkillLine skill={skill} step={now.kind === 'working' ? now.step.skillStep : null} />
+          <SkillLine
+            skill={skill}
+            step={now.kind === 'working' ? now.step.skillStep : null}
+            reached={skillReached}
+          />
         )}
 
         {now.kind === 'working' && (
@@ -187,7 +261,7 @@ export function NowBanner({
                 <Sparkles aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
                 <span>
                   <span className="font-semibold">Why: </span>
-                  {now.step.why}
+                  <Typed key={now.step.key} text={now.step.why} />
                 </span>
               </p>
             )}

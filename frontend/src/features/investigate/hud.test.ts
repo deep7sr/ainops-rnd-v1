@@ -231,6 +231,27 @@ describe('what the counters count', () => {
   })
 })
 
+it('how far the skill got in the latest reply', () => {
+  const skill: RunEvent = {
+    type: 'skill',
+    name: 'link-check',
+    description: '',
+    steps: ['a', 'b', 'c'],
+    author: '',
+    reviewed_by: '',
+    at_ms: 1,
+  }
+  const onStep = (id: string, step: number): RunEvent => ({
+    ...(call(id, 'ping', 'network', 'IPLC-RTR-TRV') as Extract<RunEvent, { type: 'tool_call' }>),
+    skill_step: step,
+  })
+  const events: RunEvent[] = [started, skill, onStep('E1', 2), onStep('E2', 1)]
+  expect(hudOf(events).skillReached).toBe(2)
+  expect(hudOf([started, call('E1', 'ping', 'network')]).skillReached).toBe(0)
+  const next: RunEvent[] = [...events, { type: 'message', turn: 2, text: 'And?', at: '' }]
+  expect(hudOf(next).skillReached).toBe(0) // a new reply starts again
+})
+
 describe('the phases', () => {
   it('after a recheck the agent verifies', () => {
     const hud = hudOf([
