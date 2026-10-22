@@ -100,6 +100,7 @@ describe('the conversation, rebuilt from the events', () => {
     expect(view.now).toEqual({
       kind: 'stopped',
       message: 'You stopped AINOPS before it finished.',
+      detail: null,
     })
     expect(conversationTurns(events, DEVICES)[1].ended).toBe('stopped')
   })

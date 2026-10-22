@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RunEvent, Topology } from '@/api'
 import { boxIssue, faultFrame, type AgentWalk } from '@/features/topology/highlight'
 import { frameView, NODE_WIDTH } from '@/features/topology/layout'
@@ -365,5 +365,25 @@ describe('the agent console', () => {
       'The commands the agent runs on a device show here',
     )
     expect(mapWith(walk({ mode: 'resting' })).textContent).not.toContain('Network not in table')
+  })
+})
+
+describe('while the AI thinks', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('the Now line counts the seconds, from 3 on, and starts again with each new result', () => {
+    vi.useFakeTimers()
+    const step = (key: string) =>
+      deriveInvestigation(events, NAMES).steps.find((s) => s.key === key)
+    const banner = (key: string) => (
+      <NowBanner now={{ kind: 'thinking', last: step(key) ?? null }} stepCount={3} />
+    )
+    const { container, rerender } = render(banner('E1'))
+    act(() => vi.advanceTimersByTime(2000))
+    expect(container.textContent).not.toMatch(/…\s*2 s/) // not before 3 s
+    act(() => vi.advanceTimersByTime(10000))
+    expect(container.textContent).toContain('12 s')
+    rerender(banner('E2'))
+    expect(container.textContent).not.toContain('12 s')
   })
 })

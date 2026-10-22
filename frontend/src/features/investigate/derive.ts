@@ -1,6 +1,7 @@
 import type { Evidence, Report, RunEvent, ToolHealth } from '@/api'
 import type { DeviceState, MapHighlight, MapPing } from '@/features/topology/highlight'
 import { describeCall, shortCall } from './describe'
+import { errorText } from './error-text'
 import { readTrace } from './trace'
 
 // Turns the raw event stream of an investigation into what the page shows: the steps of the
@@ -124,7 +125,8 @@ export type Now =
   | { kind: 'working'; step: Step }
   | { kind: 'thinking'; last: Step | null }
   | { kind: 'done'; verdict: Verdict }
-  | { kind: 'stopped'; message: string }
+  /** detail: the raw message behind `message`, when that says it in plain words. */
+  | { kind: 'stopped'; message: string; detail?: string | null }
 
 export interface InvestigationView {
   /** The latest message: the question, or the engineer's latest follow-up. */
@@ -134,6 +136,7 @@ export interface InvestigationView {
   steps: Step[]
   notes: string[]
   verdict: Verdict | null
+  /** Why the latest reply ended without a report, in plain words. */
   error: string | null
   now: Now
   skill: ActiveSkill | null
@@ -195,6 +198,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
   let question: string | null = null
   let verdict: Verdict | null = null
   let error: string | null = null
+  let errorDetail: string | null = null
   let path: string[] = []
   let pathEnds: [string, string] = ['', '']
   let traced = false // a traced route (the way traffic really goes) beats the cabled path
@@ -216,6 +220,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         question = text(event.text)
         verdict = null
         error = null
+        errorDetail = null
         skill = null
         break
       case 'thought':
@@ -402,7 +407,13 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         break
       case 'error':
       case 'stopped':
-        error = event.type === 'stopped' ? 'You stopped AINOPS before it finished.' : event.message
+        if (event.type === 'stopped') {
+          error = 'You stopped AINOPS before it finished.'
+        } else {
+          const text = errorText(event.message)
+          error = text.said
+          errorDetail = text.detail
+        }
         // A check that never came back is not running any more.
         for (const step of steps) {
           if (step.state === 'running') {
@@ -425,7 +436,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
     notes,
     verdict,
     error,
-    now: nowOf(steps, verdict, error),
+    now: nowOf(steps, verdict, error, errorDetail),
     skill,
     highlight: {
       path,
@@ -574,9 +585,14 @@ function caption(steps: Step[]) {
   return running ? { device: running.device as string, label: shortCall(running.tool) } : null
 }
 
-function nowOf(steps: Step[], verdict: Verdict | null, error: string | null): Now {
+function nowOf(
+  steps: Step[],
+  verdict: Verdict | null,
+  error: string | null,
+  detail: string | null,
+): Now {
   if (verdict) return { kind: 'done', verdict }
-  if (error) return { kind: 'stopped', message: error }
+  if (error) return { kind: 'stopped', message: error, detail }
   const running = [...steps].reverse().find((s) => s.state === 'running')
   if (running) return { kind: 'working', step: running }
   return steps.length ? { kind: 'thinking', last: steps[steps.length - 1] } : { kind: 'starting' }

@@ -9,6 +9,7 @@ import {
   TriangleAlert,
 } from 'lucide-react'
 import { motion } from 'motion/react'
+import { useEffect, useState } from 'react'
 import { stepHeadline } from '@/features/skills/headline'
 import { crossFade } from '@/lib/motion'
 import { cn } from '@/lib/utils'
@@ -21,7 +22,29 @@ import { ToolIcon } from './tool-icon'
 
 /** Changes whenever the banner says something new: a new check, thinking, the answer. */
 function nowKey(now: Now): string {
-  return now.kind === 'working' ? `working-${now.step.key}` : now.kind
+  if (now.kind === 'working') return `working-${now.step.key}`
+  if (now.kind === 'thinking') return `thinking-${now.last?.key ?? ''}`
+  return now.kind
+}
+
+/**
+ * How long the AI has been thinking. On the free AI tier it can take half a minute between steps
+ * (the live run of 2026-10-22), and a screen that does not change looks stuck. It counts from when
+ * the banner started saying it (it restarts with each new line); not announced: the banner is a
+ * live region and a ticking number would be read out every second.
+ */
+function ThinkingFor() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setSeconds((s) => s + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  if (seconds < 3) return null
+  return (
+    <span aria-hidden="true" className="font-normal text-muted-foreground tabular-nums">
+      {seconds} s
+    </span>
+  )
 }
 
 /** The running tool's icon with a spinning ring around it. */
@@ -145,6 +168,7 @@ export function NowBanner({
               className="size-4 animate-spin motion-reduce:animate-none"
             />
             Reading the question and choosing the first check…
+            <ThinkingFor />
           </p>
         )}
 
@@ -175,6 +199,7 @@ export function NowBanner({
             <p className="flex items-center gap-2 text-[15px] font-semibold text-provenance-ai">
               <Sparkles aria-hidden="true" className="size-4 shrink-0" />
               Reading the evidence and deciding the next step…
+              <ThinkingFor />
             </p>
             {now.last && (
               <div className="pl-6 text-sm text-muted-foreground">
@@ -208,9 +233,21 @@ export function NowBanner({
         )}
 
         {now.kind === 'stopped' && (
-          <p role="alert" className="mt-1 text-sm text-status-critical">
-            {now.message}
-          </p>
+          <div className="mt-1 space-y-1 text-sm">
+            <p role="alert" className="text-status-critical">
+              {now.message}
+            </p>
+            {now.detail && (
+              <details>
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  Technical details
+                </summary>
+                <p className="mt-1 font-mono text-xs break-all text-muted-foreground">
+                  {now.detail}
+                </p>
+              </details>
+            )}
+          </div>
         )}
       </motion.div>
     </section>
