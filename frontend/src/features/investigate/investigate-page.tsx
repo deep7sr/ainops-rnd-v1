@@ -12,7 +12,7 @@ import {
   FlaskConical,
   X,
 } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
@@ -457,7 +457,6 @@ function Run({ runId }: { runId: string }) {
   const [panelDevice, setPanelDevice] = useState<string | null>(null)
   // A message was sent and its turn has not shown up in the events yet.
   const [awaitingTurn, setAwaitingTurn] = useState<number | null>(null)
-  const bottom = useRef<HTMLDivElement>(null)
   const waiting = awaitingTurn !== null && view.turn < awaitingTurn
   const running = waiting || (!done && !view.verdict && !view.error && !error)
   const now: Now = waiting
@@ -489,11 +488,6 @@ function Run({ runId }: { runId: string }) {
   const canZoom = !running && view.verdict !== null && frame.length > 0
   const zoomed = canZoom && !wholeMap
 
-  // Follow the live steps while the investigation runs.
-  useEffect(() => {
-    if (running) bottom.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [view.steps.length, running])
-
   const selectEvidence = (id: string) => {
     setPanelDevice(null)
     setFocused(id)
@@ -519,9 +513,9 @@ function Run({ runId }: { runId: string }) {
   }, [events])
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <div className="flex min-h-0 flex-col lg:border-r">
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto max-w-[1600px] space-y-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
               Conversation
@@ -553,66 +547,118 @@ function Run({ runId }: { runId: string }) {
             skillReached={hud.skillReached}
           />
 
-          {/* The map appears once the agent looks at the network: a greeting or a refusal has
-              nothing to show on it. It keeps everything checked in the whole conversation. */}
-          {touchesNetwork(view.steps) && (
-            <>
-              <div className="relative rounded-lg border bg-card bg-dot-grid p-2">
-                {canZoom && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setWholeMap((whole) => !whole)}
-                    className="absolute top-3 right-3 z-20 h-7 gap-1.5 px-2 text-xs"
-                  >
-                    {zoomed ? (
-                      <Maximize2 aria-hidden="true" className="size-3.5" />
-                    ) : (
-                      <Focus aria-hidden="true" className="size-3.5" />
-                    )}
-                    {zoomed ? 'Show whole map' : 'Zoom to the root cause'}
-                  </Button>
-                )}
-                {topology.data ? (
-                  <NetworkMap
-                    topology={topology.data}
-                    highlight={view.highlight}
-                    agent={walk}
-                    focus={zoomed ? frame : null}
-                    showEdges={false}
-                    selected={panelDevice}
-                    onSelect={(key) => {
-                      if (deviceNames.includes(key)) setPanelDevice(key)
-                    }}
-                  />
-                ) : (
-                  <Skeleton className="aspect-[1000/560] w-full" />
-                )}
+          {/* The stage: the live map, with the agent at work beside it. It is set while the agent
+              works, and stays once it looked at the network (it keeps everything checked in the
+              whole conversation); a greeting or a refusal has nothing to show on it. */}
+          {(running || touchesNetwork(view.steps)) && (
+            <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+              <section aria-label="Live network map" className="space-y-2">
+                <div className="relative rounded-lg border bg-card bg-dot-grid p-2 shadow-sm">
+                  {canZoom && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWholeMap((whole) => !whole)}
+                      className="absolute top-3 right-3 z-20 h-7 gap-1.5 px-2 text-xs"
+                    >
+                      {zoomed ? (
+                        <Maximize2 aria-hidden="true" className="size-3.5" />
+                      ) : (
+                        <Focus aria-hidden="true" className="size-3.5" />
+                      )}
+                      {zoomed ? 'Show whole map' : 'Zoom to the root cause'}
+                    </Button>
+                  )}
+                  {topology.data ? (
+                    <NetworkMap
+                      topology={topology.data}
+                      highlight={view.highlight}
+                      agent={walk}
+                      focus={zoomed ? frame : null}
+                      showEdges={false}
+                      selected={panelDevice}
+                      onSelect={(key) => {
+                        if (deviceNames.includes(key)) setPanelDevice(key)
+                      }}
+                    />
+                  ) : (
+                    <Skeleton className="aspect-[1000/560] w-full" />
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Legend />
+                  <p className="text-xs text-muted-foreground">
+                    Click a device to see what was found on it.
+                  </p>
+                </div>
+              </section>
+              <div className="space-y-4">
+                <AgentHud
+                  hud={hud}
+                  running={running}
+                  clock={clock}
+                  deviceCount={topology.data?.devices.length ?? 0}
+                />
+                <SuspectBoard board={hud.suspects} roles={roles} onSelect={setPanelDevice} />
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Legend />
+            </div>
+          )}
+
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+            <section
+              aria-label="Steps of the investigation"
+              className="rounded-lg border bg-muted/30 px-5 py-4"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
+                  What the agent did, step by step
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Click a device to see what was found on it.
+                  {view.verdict && !waiting
+                    ? `done in ${formatMs(view.verdict.atMs)}`
+                    : running
+                      ? 'live'
+                      : ''}
                 </p>
               </div>
-              <SuspectBoard board={hud.suspects} roles={roles} onSelect={setPanelDevice} />
-            </>
-          )}
 
-          {view.verdict && !waiting && (
-            <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />
-          )}
-          {!running && (
-            <CaseSection
-              runId={runId}
-              outcome={view.verdict?.report.outcome ?? null}
-              caseEvents={caseEvents}
-              notSaved={notSaved}
-            />
-          )}
+              {view.steps.length === 0 && running && <Skeleton className="h-16 w-full" />}
+
+              <Timeline
+                steps={view.steps}
+                focused={focused}
+                roles={roles}
+                onSelectDevice={setPanelDevice}
+              />
+
+              {running &&
+                view.steps.length > 0 &&
+                view.steps.every((s) => s.state !== 'running') && (
+                  <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">
+                    <Sparkles aria-hidden="true" className="size-3.5" />
+                    Reading the evidence and deciding the next step…
+                  </p>
+                )}
+            </section>
+            <div className="space-y-4">
+              {view.verdict && !waiting && (
+                <ReportCard verdict={view.verdict} onSelectEvidence={selectEvidence} />
+              )}
+              {!running && (
+                <CaseSection
+                  runId={runId}
+                  outcome={view.verdict?.report.outcome ?? null}
+                  caseEvents={caseEvents}
+                  notSaved={notSaved}
+                />
+              )}
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div className="border-t bg-background px-6 py-3">
+      <div className="border-t bg-background px-6 py-3">
+        <div className="mx-auto max-w-[1600px]">
           <ReplyBox
             runId={runId}
             running={running}
@@ -623,52 +669,6 @@ function Run({ runId }: { runId: string }) {
             }}
           />
         </div>
-      </div>
-
-      <div className="flex min-h-0 flex-col bg-muted/30">
-        {/* Stays in view while the steps scroll under it. */}
-        <div className="shrink-0 px-5 pt-5">
-          <AgentHud
-            hud={hud}
-            running={running}
-            clock={clock}
-            deviceCount={topology.data?.devices.length ?? 0}
-          />
-        </div>
-        <aside
-          aria-label="Steps of the investigation"
-          className="min-h-0 flex-1 overflow-y-auto px-5 py-5"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold tracking-wider text-eyebrow uppercase">
-              What the agent did, step by step
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {view.verdict && !waiting
-                ? `done in ${formatMs(view.verdict.atMs)}`
-                : running
-                  ? 'live'
-                  : ''}
-            </p>
-          </div>
-
-          {view.steps.length === 0 && running && <Skeleton className="h-16 w-full" />}
-
-          <Timeline
-            steps={view.steps}
-            focused={focused}
-            roles={roles}
-            onSelectDevice={setPanelDevice}
-          />
-
-          {running && view.steps.length > 0 && view.steps.every((s) => s.state !== 'running') && (
-            <p className="flex items-center gap-2 pl-11 text-sm text-provenance-ai">
-              <Sparkles aria-hidden="true" className="size-3.5" />
-              Reading the evidence and deciding the next step…
-            </p>
-          )}
-          <div ref={bottom} />
-        </aside>
       </div>
 
       <DevicePanel

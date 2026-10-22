@@ -67,6 +67,20 @@ describe('the menu', () => {
     ])
   })
 
+  it('folds to icons while an investigation is open, so the live map gets the room', () => {
+    const state = () =>
+      document.querySelector('[data-slot="sidebar"][data-state]')?.getAttribute('data-state')
+    openAt('/investigations/inv-1')
+    expect(state()).toBe('collapsed')
+  })
+
+  it('is open on the other pages', () => {
+    openAt('/inventory')
+    expect(
+      document.querySelector('[data-slot="sidebar"][data-state]')?.getAttribute('data-state'),
+    ).toBe('expanded')
+  })
+
   it('names the page you are on in the header', () => {
     openAt('/graph')
     expect(screen.getByRole('banner')).toHaveTextContent('Network map')

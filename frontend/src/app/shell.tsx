@@ -12,7 +12,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { DURATION, EASE_OUT } from '@/lib/motion'
@@ -149,13 +149,21 @@ export function Shell() {
   })
   const pending = cases.data?.counts.pending ?? 0
   const current = NAV.find((item) => isActive(location.pathname, item))
+  // The menu folds to icons while an investigation is open, so the live map gets the room; it is
+  // open again on the other pages. Each can be toggled by hand.
+  const onRun = /^\/investigations\/[^/]+/.test(location.pathname)
+  const [menuOpen, setMenuOpen] = useState(true)
+  const [menuOpenOnRun, setMenuOpenOnRun] = useState(false)
 
   useEffect(() => {
     document.title = current ? `${current.label} · AINOPS` : 'AINOPS'
   }, [current])
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      open={onRun ? menuOpenOnRun : menuOpen}
+      onOpenChange={onRun ? setMenuOpenOnRun : setMenuOpen}
+    >
       <Sidebar collapsible="icon">
         <SidebarHeader className="px-3 py-3">
           <div className="flex items-center gap-2.5 overflow-hidden">

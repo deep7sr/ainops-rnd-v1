@@ -74,7 +74,7 @@ function SidebarProvider({
       }
 
       // AINOPS: shadcn saved this in a cookie, which would travel to the API with every request.
-      // The app shell passes `open`/`onOpenChange` and remembers the state in localStorage instead.
+      // The app shell passes `open`/`onOpenChange` instead (folded on an investigation page).
     },
     [setOpenProp, open],
   )
