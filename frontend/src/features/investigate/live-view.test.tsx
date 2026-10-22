@@ -388,6 +388,33 @@ describe('the agent console', () => {
     expect(line?.closest('.h-48')).not.toBeNull()
   })
 
+  it('a radar sweeps round the device while its command runs, and stops with the answer', () => {
+    const running = walk({})
+    running.console = { ...running.console!, state: 'running', lines: [], verdict: '' }
+    const radar = (map: HTMLElement) => map.querySelector('circle[stroke-dasharray="3 5"]')
+    const live = mapWith(running)
+    const ring = radar(live)
+    expect(ring).not.toBeNull()
+    // Round the device's centre, under its tile (the tile is drawn after it).
+    expect(ring?.parentElement?.getAttribute('transform')).toBe(
+      ring
+        ?.closest('svg')
+        ?.querySelector('[aria-label^="IPLC-RTR-TRV"]')
+        ?.getAttribute('transform'),
+    )
+    expect(live.querySelector('[class*="animate-[spin"]')).toHaveClass('motion-reduce:animate-none')
+    expect(radar(mapWith(walk({})))).toBeNull()
+  })
+
+  it('the agent is a glowing orb, its gradient unique to the map', () => {
+    const map = mapWith(walk({}))
+    const core = map.querySelector('circle[fill^="url(#map"]')
+    const id = core?.getAttribute('fill')?.slice(5, -1)
+    expect(id).toMatch(/^map[A-Za-z0-9]+-orb$/)
+    expect(map.querySelector(`radialGradient[id="${id}"]`)).not.toBeNull()
+    expect(map.querySelector('.orb-pulse')).not.toBeNull()
+  })
+
   it('keeps its place before the first command and goes when the investigation is over', () => {
     expect(mapWith(walk({ console: null, mode: 'thinking' })).textContent).toContain(
       'The commands the agent runs on a device show here',

@@ -320,15 +320,33 @@
   }
 }
 
-/* Live map: a light running round the device a command runs on. Set --perimeter (border length). */
-@keyframes scan-run {
-  to {
-    stroke-dashoffset: calc(var(--perimeter) * -1);
+/* Live map: the glow behind the device a command runs on breathes; the agent's orb pulses. */
+@keyframes breathe {
+  50% {
+    transform: scale(1.12);
   }
 }
 
-@utility scan-run {
-  animation: scan-run 1.6s linear infinite;
+@utility breathe {
+  animation: breathe 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes orb-pulse {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.55;
+  }
+}
+
+@utility orb-pulse {
+  animation: orb-pulse 1.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
   @media (prefers-reduced-motion: reduce) {
     animation: none;
   }

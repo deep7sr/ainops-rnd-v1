@@ -1,12 +1,11 @@
-// The agent on the live map: a marker that travels along the links to each device the agent runs
-// a command on, the numbered trail of where it went, a light running round the device while a
-// command runs, and a console under the map with the command and the first lines the device
-// answered. All of it shows real steps only, and the timeline says the same in words (so this
+// The agent on the live map: a glowing orb that travels along the links to each device the agent
+// runs a command on, the numbered trail of where it went, a radar sweeping round the device while
+// a command runs, and a console with the command and the first lines the device answered. All of it shows real steps only, and the timeline says the same in words (so this
 // layer is aria-hidden).
 
 import { CircleCheck, CircleSlash, CircleX, SquareTerminal, TriangleAlert } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 import type { GraphLink } from '@/api'
 import { DURATION, EASE_IN_OUT, EASE_OUT } from '@/lib/motion'
 import { cn } from '@/lib/utils'
@@ -85,29 +84,31 @@ function TrailNumbers({ walk, positions }: AgentProps) {
   )
 }
 
-/** A light running round the device's border while a command runs on it. */
-function ScanBorder({ at }: { at: Point }) {
-  const width = TILE + 14
-  const height = TILE + 14
-  const perimeter = 2 * (width + height)
+const RADAR = 48
+
+/**
+ * While a command runs on a device: a breathing glow behind its tile and a radar sweeping round
+ * it. Drawn under the tile (see AgentBeneath); still for reduced motion.
+ */
+function Radar({ at, sweep }: { at: Point; sweep: string }) {
   return (
-    <rect
-      x={at.x - width / 2}
-      y={at.y - height / 2}
-      width={width}
-      height={height}
-      rx={18}
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeDasharray={`${perimeter * 0.18} ${perimeter * 0.82}`}
-      style={{ '--perimeter': `${perimeter}px` } as CSSProperties}
-      className="scan-run fill-none stroke-provenance-ai drop-shadow-[0_0_4px_var(--ai-glow)]"
-    />
+    <g transform={`translate(${at.x}, ${at.y})`}>
+      <circle r={42} className="breathe fill-(--glow)" />
+      <circle r={RADAR} className="fill-none stroke-ring" strokeWidth={1.5} strokeDasharray="3 5" />
+      {/* The circle gives the group its size, so it turns round the device's centre. */}
+      <g className="origin-center animate-[spin_1.6s_linear_infinite] [transform-box:fill-box] motion-reduce:animate-none">
+        <circle r={RADAR} className="fill-none" />
+        <path
+          d={`M0 0 L${RADAR} 0 A${RADAR} ${RADAR} 0 0 0 33.9 -33.9 Z`}
+          fill={`url(#${sweep})`}
+        />
+      </g>
+    </g>
   )
 }
 
 /** The AINOPS marker: travels along the links to the device of each new command. */
-function Marker({ walk, positions, links }: AgentProps) {
+function Marker({ walk, positions, links, orb }: AgentProps & { orb: string }) {
   // Where it was before, kept so it can travel from there (React's "state from the previous
   // render" pattern: updated while rendering, no effect needed).
   const [move, setMove] = useState({ at: walk.at, from: walk.at })
@@ -124,18 +125,14 @@ function Marker({ walk, positions, links }: AgentProps) {
       transition={{ duration: Math.min(0.9, 0.3 * (points.length - 1)), ease: EASE_IN_OUT }}
     >
       {thinking && (
-        // The AI is deciding the next step: a slow violet pulse where the agent stands.
+        // The AI is deciding the next step: a slow violet ripple where the agent stands.
         <circle
-          r={13}
+          r={14}
           className="origin-center animate-ping fill-provenance-ai/35 [animation-duration:1.6s] [transform-box:fill-box] motion-reduce:hidden"
         />
       )}
-      <circle r={12} className="fill-provenance-ai drop-shadow-[0_0_8px_var(--ai-glow)]" />
-      <path
-        d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"
-        transform="translate(-7.2 -7) scale(0.6)"
-        className="fill-white"
-      />
+      <circle r={17} className="orb-pulse fill-(--ai-glow)" />
+      <circle r={9} fill={`url(#${orb})`} className="drop-shadow-[0_0_6px_var(--ai-glow)]" />
     </motion.g>
   )
 }
@@ -259,10 +256,46 @@ interface AgentProps {
   links: GraphLink[]
 }
 
-/** The parts drawn inside the map's SVG. */
-export function AgentLayer(props: AgentProps) {
-  const { walk, positions } = props
+/** Gradients of the orb and the radar sweep (ids unique to this map). */
+function AgentDefs({ ids }: { ids: AgentIds }) {
+  return (
+    <defs>
+      <radialGradient id={ids.orb} cx="35%" cy="35%" r="70%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="45%" style={{ stopColor: 'var(--provenance-ai-border)' }} />
+        <stop offset="100%" style={{ stopColor: 'var(--provenance-ai)' }} />
+      </radialGradient>
+      <linearGradient id={ids.sweep} x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" style={{ stopColor: 'var(--ring)', stopOpacity: 0 }} />
+        <stop offset="100%" style={{ stopColor: 'var(--ring)', stopOpacity: 0.45 }} />
+      </linearGradient>
+    </defs>
+  )
+}
+
+export interface AgentIds {
+  orb: string
+  sweep: string
+}
+
+/** The parts drawn under the device tiles: the radar round the device a command runs on. */
+export function AgentBeneath({
+  walk,
+  positions,
+  ids,
+}: Pick<AgentProps, 'walk' | 'positions'> & { ids: AgentIds }) {
   const at = walk.at ? positions.get(walk.at) : undefined
+  return (
+    <g aria-hidden="true" className="pointer-events-none">
+      <AgentDefs ids={ids} />
+      {at && walk.console?.state === 'running' && <Radar at={at} sweep={ids.sweep} />}
+    </g>
+  )
+}
+
+/** The parts drawn over the device tiles. */
+export function AgentLayer(props: AgentProps & { ids: AgentIds }) {
+  const { walk, positions } = props
   // A blocked command meant for no device on the map is stopped in the middle of the map.
   const shieldAt = walk.blocked
     ? ((walk.blocked.device ? positions.get(walk.blocked.device) : undefined) ?? {
@@ -280,9 +313,8 @@ export function AgentLayer(props: AgentProps) {
       {walk.lookup && (
         <LookupSweep key={walk.lookup.key} lookup={walk.lookup} positions={positions} />
       )}
-      {at && walk.console?.state === 'running' && <ScanBorder at={at} />}
       <TrailNumbers {...props} />
-      <Marker {...props} />
+      <Marker {...props} orb={props.ids.orb} />
       {walk.blocked && shieldAt && (
         <BlockedShield key={walk.blocked.key} at={shieldAt} rule={walk.blocked.rule} />
       )}

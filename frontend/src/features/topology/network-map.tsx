@@ -6,12 +6,12 @@
 
 import { CircleCheck, CircleX, Loader2, TriangleAlert } from 'lucide-react'
 import { motion } from 'motion/react'
-import type { CSSProperties } from 'react'
+import { useId, type CSSProperties } from 'react'
 import type { GraphDevice, GraphLink, Topology } from '@/api'
 import { DeviceGlyph } from '@/components/device-glyph'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
-import { AgentConsoleStrip, AgentLayer } from './agent-layer'
+import { AgentBeneath, AgentConsoleStrip, AgentLayer } from './agent-layer'
 import {
   boxIssue,
   NO_HIGHLIGHT,
@@ -661,6 +661,9 @@ export function NetworkMap({
   className?: string
 }) {
   const reducedMotion = usePrefersReducedMotion()
+  // Gradient ids for this map, made of plain characters (they go into url(#...)).
+  const id = `map${useId().replace(/[^A-Za-z0-9]/g, '')}`
+  const ids = { orb: `${id}-orb`, sweep: `${id}-sweep` }
   const positions = layoutDevices(topology.devices)
   const lanAt = lans ? layoutLans(lans.endpoints, topology.devices, positions) : new Map()
   const sites = siteOrder(topology.devices)
@@ -794,6 +797,7 @@ export function NetworkMap({
             onSelect={onSelect}
           />
         ))}
+        {agent && <AgentBeneath walk={agent} positions={positions} ids={ids} />}
         {topology.devices.map((device) => {
           const at = positions.get(device.name)
           return at ? (
@@ -818,7 +822,9 @@ export function NetworkMap({
             fresh={ping.key === freshPing}
           />
         ))}
-        {agent && <AgentLayer walk={agent} positions={positions} links={topology.links} />}
+        {agent && (
+          <AgentLayer walk={agent} positions={positions} links={topology.links} ids={ids} />
+        )}
       </motion.svg>
       {agent && agent.mode !== 'resting' && (
         <AgentConsoleStrip console={agent.console} instant={reducedMotion} />
