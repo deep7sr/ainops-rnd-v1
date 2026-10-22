@@ -4,7 +4,7 @@
 
 import type { CommandCatalog } from '@/api'
 import type { AgentConsole, AgentWalk } from '@/features/topology/highlight'
-import type { Step } from './derive'
+import { isSafetyBlock, type Step } from './derive'
 
 /** The device a network step ran on, if it is one on the map. */
 function deviceOfStep(step: Step, onMap: Map<string, string>): string | null {
@@ -109,12 +109,14 @@ export function agentWalk(
       state:
         step.state === 'running'
           ? 'running'
-          : step.state === 'error'
-            ? 'error'
-            : problem
-              ? 'problem'
-              : 'ok',
-      verdict: problem ?? step.summary,
+          : step.failure === 'request'
+            ? 'not_run'
+            : step.state === 'error'
+              ? 'error'
+              : problem
+                ? 'problem'
+                : 'ok',
+      verdict: step.failure === 'request' ? `Not sent: ${step.summary}` : (problem ?? step.summary),
     }
   }
   // One-off moments, only while the investigation runs and only for the latest step.
@@ -123,12 +125,15 @@ export function agentWalk(
     fresh?.kind === 'tool' && fresh.server === 'topology' && fresh.state === 'ok'
       ? { key: fresh.key, devices: devicesNamed(fresh.data, platforms.keys()) }
       : null
-  const target = fresh?.kind === 'refused' ? fresh.args.device : null
+  // Only a safety rule raises the shield: a limit of the investigation (the check budget) is not
+  // a block.
+  const target = fresh?.device ?? fresh?.args.device
   const blocked =
-    fresh?.kind === 'refused'
+    fresh && isSafetyBlock(fresh)
       ? {
           key: fresh.key,
           device: typeof target === 'string' && platforms.has(target) ? target : null,
+          rule: fresh.rule === 'address' ? ('address' as const) : ('read_only' as const),
         }
       : null
   return {

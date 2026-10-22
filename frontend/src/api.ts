@@ -639,6 +639,8 @@ export type RunEvent =
       server: string
       device: string | null
       ok: boolean
+      /** Why it failed (null when ok); missing in runs recorded before 2026-10-22. */
+      failure?: 'unreachable' | 'rejected' | 'blocked' | 'request' | null
       summary: string
       data: unknown
       evidence: Evidence | null
@@ -651,6 +653,8 @@ export type RunEvent =
       tool: string
       args: Record<string, unknown>
       reason: string
+      /** The rule that refused it; missing in runs recorded before 2026-10-22. */
+      rule?: 'read_only' | 'address' | 'budget' | 'skill'
       why?: string
       skill_step?: number | null
       at_ms: number

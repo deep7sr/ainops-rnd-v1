@@ -3,7 +3,7 @@
 // console beside the device with the command and the first lines the device answered. All of it
 // shows real steps only, and the timeline says the same in words (so this layer is aria-hidden).
 
-import { CircleCheck, CircleX, SquareTerminal, TriangleAlert } from 'lucide-react'
+import { CircleCheck, CircleSlash, CircleX, SquareTerminal, TriangleAlert } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { GraphLink } from '@/api'
@@ -172,8 +172,14 @@ function LookupSweep({
   )
 }
 
-/** A write command the safety check blocked: it hits a shield at the device and stops there. */
-function BlockedShield({ at }: { at: Point }) {
+const BLOCKED_LABEL = {
+  read_only: 'Blocked: AINOPS is read-only',
+  address: 'Blocked: address not seen in the evidence',
+} as const
+
+/** A call a safety rule blocked: it hits a shield at the device and stops there. */
+function BlockedShield({ at, rule }: { at: Point; rule: keyof typeof BLOCKED_LABEL }) {
+  const width = BLOCKED_LABEL[rule].length * 6.6 + 24
   // The shield sits on the top edge of the box, its label above it (never over the box).
   const y = at.y - NODE_HEIGHT / 2 - 22
   return (
@@ -198,9 +204,9 @@ function BlockedShield({ at }: { at: Point }) {
       </g>
       <g transform="translate(0, -44)">
         <rect
-          x={-100}
+          x={-width / 2}
           y={-11}
-          width={200}
+          width={width}
           height={22}
           rx={11}
           className="fill-status-critical stroke-card"
@@ -210,7 +216,7 @@ function BlockedShield({ at }: { at: Point }) {
           dominantBaseline="central"
           className="fill-white text-[11.5px] font-semibold"
         >
-          Blocked: AINOPS is read-only
+          {BLOCKED_LABEL[rule]}
         </text>
       </g>
     </motion.g>
@@ -279,7 +285,9 @@ export function AgentLayer(props: AgentProps) {
       {at && walk.console?.state === 'running' && <ScanBorder at={at} />}
       <TrailNumbers {...props} />
       <Marker {...props} />
-      {walk.blocked && shieldAt && <BlockedShield key={walk.blocked.key} at={shieldAt} />}
+      {walk.blocked && shieldAt && (
+        <BlockedShield key={walk.blocked.key} at={shieldAt} rule={walk.blocked.rule} />
+      )}
     </g>
   )
 }
@@ -305,6 +313,7 @@ const VERDICT = {
   ok: { icon: CircleCheck, className: 'text-status-healthy' },
   problem: { icon: TriangleAlert, className: 'text-status-warning' },
   error: { icon: CircleX, className: 'text-status-critical' },
+  not_run: { icon: CircleSlash, className: 'text-muted-foreground' },
 } as const
 
 function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boolean }) {

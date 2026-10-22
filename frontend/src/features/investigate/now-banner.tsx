@@ -1,6 +1,7 @@
 import {
   BookOpenCheck,
   CircleCheck,
+  CircleSlash,
   CircleX,
   Loader2,
   ShieldX,
@@ -11,7 +12,7 @@ import { motion } from 'motion/react'
 import { stepHeadline } from '@/features/skills/headline'
 import { crossFade } from '@/lib/motion'
 import { cn } from '@/lib/utils'
-import { needsEvidence, type ActiveSkill, type Now, type Step } from './derive'
+import { isSafetyBlock, needsEvidence, type ActiveSkill, type Now, type Step } from './derive'
 import { formatMs } from './format'
 import { ToolIcon } from './tool-icon'
 
@@ -37,11 +38,22 @@ function Working({ tool }: { tool: string }) {
 }
 
 function Result({ step }: { step: Step }) {
-  if (step.kind === 'refused') {
+  if (isSafetyBlock(step)) {
     return (
       <span className="flex items-start gap-1.5 text-status-critical">
         <ShieldX aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         Blocked by the safety check: {step.summary}
+      </span>
+    )
+  }
+  // A limit of the investigation, or a request the tool turned down: nothing wrong on the network.
+  if (step.kind === 'refused' || step.failure === 'request') {
+    return (
+      <span className="flex items-start gap-1.5">
+        <CircleSlash aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+        {step.rule === 'budget'
+          ? 'Check limit reached: the AI writes its answer from what it found'
+          : `Not run: ${step.summary}`}
       </span>
     )
   }

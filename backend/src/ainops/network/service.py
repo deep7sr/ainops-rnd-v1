@@ -29,6 +29,7 @@ from ainops.network.executor import (
     Executor,
     RawOutput,
 )
+from ainops.network.failures import BLOCKED, REJECTED
 from ainops.network.guard import CommandRefusedError
 from ainops.network.health import Health, Issue
 from ainops.network.redact import redact
@@ -204,7 +205,7 @@ class NetworkService:
             if raw.device_error:
                 handled = tolerate_device_error(raw.device_error) if tolerate_device_error else None
                 if handled is None:
-                    raise ToolFailure(f"{device.name} rejected the command: {raw.device_error}")
+                    raise ToolFailure(f"{device.name} {REJECTED}: {raw.device_error}")
                 data, summary = handled
             else:
                 try:
@@ -247,7 +248,7 @@ class NetworkService:
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
             if isinstance(error, CommandRefusedError):
-                raise ToolFailure(f"safety check refused the command: {error}") from error
+                raise ToolFailure(f"{BLOCKED}: {error}") from error
             if isinstance(error, ToolFailure):
                 raise
             raise ToolFailure(str(error)) from error

@@ -285,3 +285,79 @@ def test_a_device_record_is_not_passed_on_as_a_device_name() -> None:
     asyncio.run(AinopsMiddleware(run).awrap_tool_call(request, handler))
     assert events[1]["device"] is None
     assert events[1]["data"] == payload  # the record itself still reaches the UI as data
+
+
+def test_each_refusal_names_its_rule() -> None:
+    run = _run()
+    assert run.refusal("configure_device", {}) == (
+        "read_only",
+        "'configure_device' is not an AINOPS tool",
+    )
+    address = run.refusal("ping", {"device": "IPLC-RTR-MAA", "destination": "10.10.4.1"})
+    assert address and address[0] == "address"
+    run.tool_calls = MAX_TOOL_CALLS
+    budget = run.refusal("find_device", {"query": "IPLC-RTR-MAA"})
+    assert budget and budget[0] == "budget"
+
+
+def _call_and_events(
+    run: Investigation, result: ToolMessage, tool: str = "get_routes"
+) -> list[Any]:
+    events: list[Any] = []
+
+    async def collect(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    run.emit = collect
+    call = ToolCall(name=tool, args={"device": "IPLC-RTR-TRV", "reason": "x"}, id="c9")
+    request = ToolCallRequest(tool_call=call, tool=None, state={}, runtime=None)  # type: ignore[arg-type]
+
+    async def handler(req: ToolCallRequest) -> ToolMessage:
+        return result
+
+    asyncio.run(AinopsMiddleware(run).awrap_tool_call(request, handler))
+    return events
+
+
+def test_a_failed_result_says_why_it_failed() -> None:
+    def failed(text: str) -> Any:
+        run = Investigation(question="Why?", emit=_ignore, tool_servers={"get_routes": "network"})
+        message = ToolMessage(content=text, tool_call_id="c9", name="get_routes", status="error")
+        return _call_and_events(run, message)[-1]["failure"]
+
+    # The live run of 2026-10-22: a bad argument is not a device that did not answer.
+    assert (
+        failed(
+            "Error executing tool get_routes: destination '192.168.200.0/24' is not a valid IPv4 "
+            "address"
+        )
+        == "request"
+    )
+    assert (
+        failed(
+            "Error executing tool get_routes: IPLC-RTR-TRV did not answer on the console "
+            "(TimeoutError)"
+        )
+        == "unreachable"
+    )
+    assert (
+        failed("Error executing tool get_routes: IPLC-RTR-TRV rejected the command: % Invalid")
+        == "rejected"
+    )
+    assert (
+        failed("Error executing tool get_routes: safety check refused the command: no") == "blocked"
+    )
+
+    run = Investigation(question="Why?", emit=_ignore, tool_servers={"get_routes": "network"})
+    ok = ToolMessage(content=json.dumps({"summary": "fine"}), tool_call_id="c9", name="get_routes")
+    assert _call_and_events(run, ok)[-1]["failure"] is None
+
+
+def test_a_refused_call_tells_the_ui_which_rule_refused_it() -> None:
+    run = Investigation(question="Why?", emit=_ignore, tool_servers={"get_routes": "network"})
+    run.tool_calls = MAX_TOOL_CALLS
+    message = ToolMessage(content="never", tool_call_id="c9", name="get_routes")
+    (event,) = _call_and_events(run, message)
+    assert (event["type"], event["rule"]) == ("refused", "budget")
+    (event,) = _call_and_events(run, message, tool="configure_interface")
+    assert (event["type"], event["rule"]) == ("refused", "read_only")

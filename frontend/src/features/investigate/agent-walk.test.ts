@@ -180,8 +180,65 @@ describe('moments on the map', () => {
       const view = deriveInvestigation([refused(device)], [...PLATFORMS.keys()])
       return agentWalk(view.steps, true, PLATFORMS, CATALOG).blocked
     }
-    expect(blockedAt('IPLC-RTR-MAA')?.device).toBe('IPLC-RTR-MAA')
+    expect(blockedAt('IPLC-RTR-MAA')).toMatchObject({ device: 'IPLC-RTR-MAA', rule: 'read_only' })
     expect(blockedAt('NOT-A-DEVICE')).toMatchObject({ device: null }) // shown, but not on a box
+  })
+
+  it('raises the shield for a safety rule only, not for the check limit', () => {
+    const walkAfter = (reason: string, rule: 'budget' | 'address') => {
+      const event: RunEvent = {
+        type: 'refused',
+        tool: 'ping',
+        args: { device: 'IPLC-RTR-TRV', destination: '10.9.9.9' },
+        reason,
+        rule,
+        at_ms: 10,
+      }
+      return agentWalk(
+        deriveInvestigation([event], [...PLATFORMS.keys()]).steps,
+        true,
+        PLATFORMS,
+        CATALOG,
+      )
+    }
+    expect(walkAfter('the tool budget (16 calls) is used up', 'budget').blocked).toBeNull()
+    expect(walkAfter('destination 10.9.9.9 did not come from …', 'address').blocked).toMatchObject({
+      device: 'IPLC-RTR-TRV',
+      rule: 'address',
+    })
+  })
+
+  it('a request the tool turned down was never sent to the device', () => {
+    // The live run of 2026-10-22 (inv-88c9b4bc, E7): a network given where an address goes.
+    const events: RunEvent[] = [
+      {
+        type: 'tool_call',
+        id: 'E7',
+        tool: 'get_interfaces',
+        server: 'network',
+        args: { device: 'IPLC-RTR-TRV' },
+        at_ms: 1,
+      },
+      {
+        type: 'tool_result',
+        id: 'E7',
+        tool: 'get_interfaces',
+        server: 'network',
+        device: 'IPLC-RTR-TRV',
+        ok: false,
+        failure: 'request',
+        summary: "Error executing tool get_interfaces: destination '192.168.200.0/24' is not valid",
+        data: null,
+        evidence: null,
+        duration_ms: 1,
+        at_ms: 2,
+      },
+    ]
+    const view = deriveInvestigation(events, [...PLATFORMS.keys()])
+    expect(agentWalk(view.steps, true, PLATFORMS, CATALOG).console).toMatchObject({
+      state: 'not_run',
+      verdict: "Not sent: destination '192.168.200.0/24' is not valid",
+    })
   })
 
   it('remembers the ports of each device from its latest interfaces check', () => {

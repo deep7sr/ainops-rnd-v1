@@ -2,6 +2,7 @@ import {
   BookOpenCheck,
   ChevronDown,
   CircleCheck,
+  CircleSlash,
   CircleX,
   Lightbulb,
   Loader2,
@@ -21,7 +22,7 @@ import { StepText } from '@/features/skills/step-text'
 import { Badge } from '@/components/ui/badge'
 import { slideUp } from '@/lib/motion'
 import { cn } from '@/lib/utils'
-import type { Step } from './derive'
+import { isSafetyBlock, type Step } from './derive'
 import { formatMs } from './format'
 import { FALLBACK_TOOL_ICON, TOOL_ICON } from './tool-icons'
 import { readTrace } from './trace'
@@ -203,7 +204,13 @@ function StepItem({
   onSelectDevice?: (device: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const Icon = step.kind === 'refused' ? ShieldX : (TOOL_ICON[step.tool] ?? FALLBACK_TOOL_ICON)
+  const safety = isSafetyBlock(step)
+  const notRun = !safety && (step.kind === 'refused' || step.failure === 'request')
+  const Icon = safety
+    ? ShieldX
+    : step.kind === 'refused'
+      ? CircleSlash
+      : (TOOL_ICON[step.tool] ?? FALLBACK_TOOL_ICON)
   const details = argText(step.args)
   const trace = step.tool === 'trace_route' && step.state === 'ok' ? readTrace(step.data) : null
 
@@ -213,11 +220,13 @@ function StepItem({
         <span
           className={cn(
             'flex size-8 shrink-0 items-center justify-center rounded-md border',
-            step.kind === 'refused'
+            safety
               ? 'border-status-critical-border bg-status-critical-bg text-status-critical'
-              : step.server === 'topology'
-                ? 'border-provenance-rule-border bg-provenance-rule-bg text-provenance-rule'
-                : 'border-border bg-secondary text-primary',
+              : step.kind === 'refused'
+                ? 'border-border bg-muted text-muted-foreground'
+                : step.server === 'topology'
+                  ? 'border-provenance-rule-border bg-provenance-rule-bg text-provenance-rule'
+                  : 'border-border bg-secondary text-primary',
           )}
         >
           <Icon aria-hidden="true" className="size-4" />
@@ -248,9 +257,13 @@ function StepItem({
             </span>
           )}
           <SkillStepTag step={step.skillStep} />
-          {step.kind === 'refused' ? (
+          {safety && step.kind === 'refused' ? (
             <span className="font-medium text-status-critical">
               Blocked by the AINOPS safety check
+            </span>
+          ) : step.kind === 'refused' ? (
+            <span className="font-medium">
+              {step.rule === 'budget' ? 'Check limit reached' : 'Limit of the investigation'}
             </span>
           ) : (
             <span>{step.server} MCP</span>
@@ -292,6 +305,8 @@ function StepItem({
                 aria-hidden="true"
                 className="mt-0.5 size-4 shrink-0 text-status-healthy"
               />
+            ) : notRun ? (
+              <CircleSlash aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             ) : (
               <CircleX aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-status-critical" />
             )}

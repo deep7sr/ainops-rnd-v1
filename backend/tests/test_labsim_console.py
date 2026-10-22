@@ -19,6 +19,7 @@ from ainops.config import REPO_ROOT
 from ainops.inventory import Inventory, load_inventory
 from ainops.network.audit import AuditLog
 from ainops.network.executor import IDLE_REFRESH_S, LiveExecutor
+from ainops.network.failures import failure_kind
 from ainops.network.service import NetworkService, ToolFailure, load_commands
 from labsim.console import Console, Session, TelnetText, start
 from labsim.model import load_lab
@@ -211,5 +212,6 @@ def test_a_device_with_no_console_fails_like_an_unreachable_one(
         audit=AuditLog(tmp_path / "audit.jsonl"),
         commands=load_commands(),
     )
-    with pytest.raises(ToolFailure, match="did not answer on the console"):
+    with pytest.raises(ToolFailure, match="did not answer on the console") as failure:
         service.get_interfaces("ISP-TRV-1")
+    assert failure_kind(str(failure.value)) == "unreachable"  # the map: "did not answer"

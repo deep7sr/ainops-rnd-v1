@@ -8,6 +8,7 @@ from replay import ReplayExecutor
 
 from ainops.network.audit import AuditLog
 from ainops.network.capture import fixture_path
+from ainops.network.failures import failure_kind
 from ainops.network.redact import redact
 from ainops.network.service import NetworkService, ToolFailure
 
@@ -109,8 +110,28 @@ def test_device_error_is_reported(service: NetworkService, tmp_path: Path) -> No
     path.parent.mkdir(parents=True)
     path.write_text("% Invalid input detected at '^' marker.", encoding="utf-8")
     service.executor = ReplayExecutor(fixtures, delay_s=0)
-    with pytest.raises(ToolFailure, match="rejected the command"):
+    with pytest.raises(ToolFailure, match="rejected the command") as failure:
         service.get_routes("IPLC-RTR-MAA")
+    assert failure_kind(str(failure.value)) == "rejected"  # it answered: not "did not answer"
+
+
+def test_a_request_the_tool_turns_down_says_nothing_about_the_device(
+    service: NetworkService,
+) -> None:
+    # 2026-10-22, live run: the AI gave a network where get_routes takes an address.
+    with pytest.raises(ToolFailure) as failure:
+        service.get_routes("IPLC-RTR-TRV", "192.168.200.0/24")
+    assert failure_kind(str(failure.value)) == "request"
+    with pytest.raises(ToolFailure) as failure:
+        service.get_interfaces("NOT-A-DEVICE")
+    assert failure_kind(str(failure.value)) == "request"
+
+
+def test_a_command_the_guard_stops_is_blocked(service: NetworkService) -> None:
+    service.commands = {"cisco_ios": {"interfaces": "configure terminal"}}
+    with pytest.raises(ToolFailure, match="safety check refused") as failure:
+        service.get_interfaces("IPLC-RTR-MAA")
+    assert failure_kind(str(failure.value)) == "blocked"
 
 
 @pytest.mark.parametrize(

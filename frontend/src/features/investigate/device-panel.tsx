@@ -175,7 +175,15 @@ export function DevicePanel({
                         {step.state === 'running' ? (
                           <p className="text-muted-foreground">Running…</p>
                         ) : step.state === 'error' ? (
-                          <p className="text-status-critical">{step.summary}</p>
+                          <p
+                            className={cn(
+                              step.failure === 'request'
+                                ? 'text-muted-foreground'
+                                : 'text-status-critical',
+                            )}
+                          >
+                            {step.failure === 'request' ? `Not run: ${step.summary}` : step.summary}
+                          </p>
                         ) : (
                           <HealthLine health={step.health} summary={step.summary} />
                         )}

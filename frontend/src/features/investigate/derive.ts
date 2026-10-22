@@ -36,7 +36,51 @@ export interface Step {
   skillStep: number | null
   /** Which message of the conversation this step answers (1 = the question). */
   turn: number
+  /** Why a tool step failed (state 'error'); null otherwise. */
+  failure: Failure | null
+  /** The rule that refused a 'refused' step; null otherwise. */
+  rule: RefusalRule | null
 }
+
+/**
+ * Why a check failed. unreachable: the device did not answer. rejected: it answered with an error.
+ * blocked: the command guard stopped it before the device. request: the tool could not do what
+ * the AI asked (a bad address, an unknown device): it says nothing about the device. unfinished:
+ * the investigation stopped while it ran.
+ */
+export type Failure = 'unreachable' | 'rejected' | 'blocked' | 'request' | 'unfinished'
+
+/** read_only and address are safety rules; budget and skill are limits of the investigation. */
+export type RefusalRule = 'read_only' | 'address' | 'budget' | 'skill'
+
+const FAILURES: Failure[] = ['unreachable', 'rejected', 'blocked', 'request']
+const RULES: RefusalRule[] = ['read_only', 'address', 'budget', 'skill']
+
+/** The server says why; runs recorded before it did are read from the message. */
+export function failureOf(failure: unknown, summary: string): Failure {
+  if (FAILURES.includes(failure as Failure)) return failure as Failure
+  if (summary.includes('did not answer on the console')) return 'unreachable'
+  if (summary.includes('rejected the command')) return 'rejected'
+  if (summary.includes('safety check refused the command')) return 'blocked'
+  return 'request'
+}
+
+export function ruleOf(rule: unknown, reason: string): RefusalRule {
+  if (RULES.includes(rule as RefusalRule)) return rule as RefusalRule
+  if (reason.includes('tool budget')) return 'budget'
+  if (reason.includes('did not come from the question')) return 'address'
+  if (/\bskills?\b/.test(reason)) return 'skill'
+  return 'read_only'
+}
+
+/** A call the AINOPS safety rules stopped (not a limit of the investigation reached). */
+export function isSafetyBlock(step: Step): boolean {
+  if (step.kind === 'refused') return step.rule === 'read_only' || step.rule === 'address'
+  return step.kind === 'tool' && step.failure === 'blocked'
+}
+
+/** "Error executing tool get_routes: destination ... is not valid" -> "destination ... is not valid". */
+const plainError = (summary: string) => summary.replace(/^Error executing tool [\w-]+: /, '')
 
 /** The expert skill the agent opened (the latest one, if it opened two). */
 export interface ActiveSkill {
@@ -197,6 +241,8 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           atMs: event.at_ms,
           skillStep: skill ? stepNumber(event.skill_step) : null,
           turn,
+          failure: null,
+          rule: null,
         }
         steps.push(step)
         byId.set(event.id, step)
@@ -206,7 +252,8 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         const step = byId.get(event.id)
         if (!step) break
         step.state = event.ok ? 'ok' : 'error'
-        step.summary = event.summary
+        step.failure = event.ok ? null : failureOf(event.failure, event.summary)
+        step.summary = event.ok ? event.summary : plainError(event.summary)
         step.data = event.data
         step.evidence = event.evidence
         step.health = event.health ?? null
@@ -256,6 +303,8 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           atMs: event.at_ms,
           skillStep: null,
           turn,
+          failure: null,
+          rule: null,
         })
         break
       }
@@ -286,6 +335,8 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           atMs: event.at_ms,
           skillStep: null,
           turn,
+          failure: null,
+          rule: null,
         })
         break
       }
@@ -310,6 +361,8 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           atMs: event.at_ms,
           skillStep: null,
           turn,
+          failure: null,
+          rule: null,
         })
         break
       case 'refused':
@@ -332,6 +385,8 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
           atMs: event.at_ms,
           skillStep: skill ? stepNumber(event.skill_step) : null,
           turn,
+          failure: null,
+          rule: ruleOf(event.rule, event.reason),
         })
         break
       case 'report':
@@ -352,6 +407,7 @@ export function deriveInvestigation(events: RunEvent[], deviceNames: string[]): 
         for (const step of steps) {
           if (step.state === 'running') {
             step.state = 'error'
+            step.failure = 'unfinished'
             step.summary = event.type === 'stopped' ? 'Did not finish: stopped.' : 'Did not finish.'
           }
         }
@@ -408,6 +464,13 @@ function marks(steps: Step[]): Mark[] {
   const out: Mark[] = []
   for (const step of deviceSteps(steps)) {
     const trace = step.tool === 'trace_route' && step.state === 'ok' ? readTrace(step.data) : null
+    if (step.state === 'error' && step.failure !== 'unreachable') {
+      // It answered with an error: checked. Never reached it: the step says nothing about it.
+      if (step.failure === 'rejected') {
+        out.push({ device: step.device as string, state: 'ok', health: null })
+      }
+      continue
+    }
     if (!trace) {
       out.push({ device: step.device as string, state: step.state, health: step.health })
       continue

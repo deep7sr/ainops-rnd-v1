@@ -3,6 +3,7 @@ import type { RunEvent } from '@/api'
 import {
   deriveInvestigation,
   deviceStates,
+  isSafetyBlock,
   parseAffected,
   shortInterface,
   type Step,
@@ -79,7 +80,8 @@ describe('deriveInvestigation', () => {
       server: 'network',
       device: 'IPLC-RTR-TRV',
       ok: false,
-      summary: 'no answer',
+      summary:
+        'Error executing tool get_interfaces: IPLC-RTR-TRV did not answer on the console (TimeoutError)',
       data: null,
       evidence: null,
       duration_ms: 5,
@@ -145,6 +147,8 @@ describe('deviceStates', () => {
     atMs: 1,
     skillStep: null,
     turn: 1,
+    failure: null,
+    rule: null,
   }
   const problem = {
     status: 'problem' as const,
@@ -161,10 +165,24 @@ describe('deviceStates', () => {
 
   it('a device that answered once is not unreachable', () => {
     const states = deviceStates([
-      { ...base, state: 'error', health: null },
+      { ...base, state: 'error', health: null, failure: 'unreachable' },
       { ...base, key: 'E2' },
     ])
     expect(states.get('IPLC-RTR-MAA')).toBe('ok')
+    expect(
+      deviceStates([{ ...base, state: 'error', health: null, failure: 'unreachable' }]).get(
+        'IPLC-RTR-MAA',
+      ),
+    ).toBe('unreachable')
+  })
+
+  it('only a device that did not answer is unreachable', () => {
+    const failed = (failure: Step['failure']) =>
+      deviceStates([{ ...base, state: 'error', health: null, failure }]).get('IPLC-RTR-MAA')
+    expect(failed('rejected')).toBe('checked') // it answered, with an error
+    expect(failed('request')).toBeUndefined() // the AI's request never reached it
+    expect(failed('blocked')).toBeUndefined()
+    expect(failed('unfinished')).toBeUndefined()
   })
 
   it('tools without a verdict only mark the device as checked', () => {
@@ -206,4 +224,94 @@ it('does not crash when a result carries a device record instead of a name', () 
   const view = deriveInvestigation(events, DEVICES)
   expect(view.steps[0].device).toBeNull()
   expect(view.steps[0].state).toBe('ok')
+})
+
+describe('why a step failed or was refused', () => {
+  const call = (id: string, device = 'IPLC-RTR-TRV'): RunEvent => ({
+    type: 'tool_call',
+    id,
+    tool: 'get_routes',
+    server: 'network',
+    args: { device },
+    at_ms: 1,
+  })
+  const failed = (id: string, summary: string, failure?: 'request' | 'unreachable'): RunEvent => ({
+    type: 'tool_result',
+    id,
+    tool: 'get_routes',
+    server: 'network',
+    device: 'IPLC-RTR-TRV',
+    ok: false,
+    failure,
+    summary,
+    data: null,
+    evidence: null,
+    duration_ms: 1,
+    at_ms: 2,
+  })
+
+  it('a bad request from the AI does not make the device "did not answer"', () => {
+    // The live run of 2026-10-22 (inv-88c9b4bc, E7).
+    const view = deriveInvestigation(
+      [
+        call('E7'),
+        failed(
+          'E7',
+          "Error executing tool get_routes: destination '192.168.200.0/24' is not a valid IPv4 address",
+          'request',
+        ),
+      ],
+      DEVICES,
+    )
+    expect(view.steps[0]).toMatchObject({
+      failure: 'request',
+      summary: "destination '192.168.200.0/24' is not a valid IPv4 address",
+    })
+    expect(view.highlight.states.has('IPLC-RTR-TRV')).toBe(false)
+  })
+
+  it('runs recorded before the server said why are read from the message', () => {
+    const view = deriveInvestigation(
+      [
+        call('E1'),
+        failed('E1', 'IPLC-RTR-TRV did not answer on the console (TimeoutError)'),
+        call('E2', 'IPLC-RTR-MAA'),
+        failed('E2', "'X' is not a known device"),
+      ],
+      DEVICES,
+    )
+    expect(view.steps.map((s) => s.failure)).toEqual(['unreachable', 'request'])
+    expect(view.highlight.states.get('IPLC-RTR-TRV')).toBe('unreachable')
+  })
+
+  it("the server's word wins over the message", () => {
+    const view = deriveInvestigation(
+      [call('E1'), failed('E1', 'IPLC-RTR-TRV timed out', 'unreachable')],
+      DEVICES,
+    )
+    expect(view.steps[0].failure).toBe('unreachable')
+  })
+
+  it('a check limit is not a safety block', () => {
+    const refused = (reason: string, rule?: 'budget' | 'read_only'): RunEvent => ({
+      type: 'refused',
+      tool: 'get_routes',
+      args: { device: 'IPLC-RTR-TRV' },
+      reason,
+      rule,
+      at_ms: 3,
+    })
+    const steps = deriveInvestigation(
+      [
+        refused('the tool budget (16 calls) is used up: write the report now', 'budget'),
+        refused('the tool budget (16 calls) is used up: write the report now'), // recorded before
+        refused("'configure_interface' is not an AINOPS tool"),
+        refused('destination 10.9.9.9 did not come from the question or earlier evidence'),
+        refused('at most 2 skills per investigation: continue with the tools'),
+      ],
+      DEVICES,
+    ).steps
+    expect(steps.map((s) => s.rule)).toEqual(['budget', 'budget', 'read_only', 'address', 'skill'])
+    expect(steps.map(isSafetyBlock)).toEqual([false, false, true, true, false])
+  })
 })

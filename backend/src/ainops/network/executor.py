@@ -23,6 +23,7 @@ from typing import Any, Protocol
 
 from ainops.config import device_credentials
 from ainops.inventory import Device
+from ainops.network.failures import UNREACHABLE
 from ainops.network.guard import check_command
 from ainops.network.redact import redact
 
@@ -139,7 +140,7 @@ class LiveExecutor:
                     self._drop(device)
                     if attempt == 2:
                         raise DeviceUnreachableError(
-                            f"{device.name} did not answer on the console ({type(error).__name__})"
+                            f"{device.name} {UNREACHABLE} ({type(error).__name__})"
                         ) from error
             duration_ms = int((time.monotonic() - started) * 1000)
         text = redact(output or "")

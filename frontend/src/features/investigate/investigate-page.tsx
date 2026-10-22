@@ -29,7 +29,7 @@ import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { useRunEvents } from '@/hooks/use-run-events'
 import { cn } from '@/lib/utils'
 import { conversationTurns, MAX_MESSAGES, type Turn } from './conversation'
-import { deriveInvestigation, touchesNetwork, type Now } from './derive'
+import { deriveInvestigation, isSafetyBlock, touchesNetwork, type Now } from './derive'
 import { DevicePanel } from './device-panel'
 import { OutcomeBadge, ReportCard } from './report-card'
 import { formatMs } from './format'
@@ -501,7 +501,7 @@ function Run({ runId }: { runId: string }) {
   }
   const topologyCalls = view.steps.filter((s) => s.server === 'topology').length
   const networkCalls = view.steps.filter((s) => s.server === 'network').length
-  const refusals = view.steps.filter((s) => s.kind === 'refused').length
+  const refusals = view.steps.filter(isSafetyBlock).length
   const device = topology.data?.devices.find((d) => d.name === panelDevice) ?? null
   const latest = turns[turns.length - 1]
   // The case events of the latest reply: drafted, updated, or not saved.

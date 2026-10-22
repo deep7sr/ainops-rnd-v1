@@ -19,7 +19,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
@@ -36,6 +36,7 @@ from ainops.agent.prompts import RECHECK, SYSTEM_PROMPT
 from ainops.agent.report import EvidenceRecord, Report, not_shown, verify
 from ainops.agent.skills import Skill, SkillLibrary, instructions, load_skills, step_tools
 from ainops.config import Settings
+from ainops.network.failures import failure_kind
 from ainops.similar import Hints, hints_prompt
 
 Event = dict[str, Any]
@@ -46,6 +47,10 @@ MAX_SKILL_LOADS = 2  # opening a skill is not a network check and does not use t
 USE_SKILL = "use_skill"
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _IP_ARGS = ("destination", "source", "query")
+
+# Which rule refused a call. read_only and address are safety rules (the UI shows a shield);
+# budget and skill are limits on the investigation.
+RefusalRule = Literal["read_only", "address", "budget", "skill"]
 
 
 def _text(content: Any) -> str:
@@ -117,15 +122,24 @@ class Investigation:
 
     def check(self, tool: str, args: dict[str, Any]) -> str | None:
         """AINOPS safety check before a tool call reaches an MCP server. None means allowed."""
+        refusal = self.refusal(tool, args)
+        return refusal[1] if refusal else None
+
+    def refusal(self, tool: str, args: dict[str, Any]) -> tuple[RefusalRule, str] | None:
+        """The rule that refuses this call and why; None means allowed."""
         if tool not in self.tool_servers:
-            return f"'{tool}' is not an AINOPS tool"
+            # Every AINOPS tool only reads: anything else (a change) is not one.
+            return "read_only", f"'{tool}' is not an AINOPS tool"
         if self.tool_calls >= MAX_TOOL_CALLS:
-            return f"the tool budget ({MAX_TOOL_CALLS} calls) is used up: write the report now"
+            return (
+                "budget",
+                f"the tool budget ({MAX_TOOL_CALLS} calls) is used up: write the report now",
+            )
         for name in _IP_ARGS:
             value = args.get(name)
             is_ip = isinstance(value, str) and _IPV4.fullmatch(value.strip())
             if is_ip and str(value).strip() not in self.known_ips:
-                return (
+                return "address", (
                     f"{name} {value} did not come from the question or earlier evidence; "
                     "use only addresses you have seen"
                 )
@@ -176,14 +190,16 @@ class AinopsMiddleware(AgentMiddleware):
             return await self._use_skill(str(call_id), args, reason)
         request = request.override(tool_call={**call, "args": args})
 
-        refusal = run.check(name, args)
-        if refusal:
+        refused = run.refusal(name, args)
+        if refused:
+            rule, refusal = refused
             await run.emit(
                 {
                     "type": "refused",
                     "tool": name,
                     "args": args,
                     "reason": refusal,
+                    "rule": rule,
                     "why": reason,
                     "skill_step": skill_step,
                     "at_ms": run.elapsed_ms(),
@@ -255,6 +271,8 @@ class AinopsMiddleware(AgentMiddleware):
                 "server": server,
                 "device": device,
                 "ok": not failed,
+                # Why it failed: only "unreachable" says the device did not answer.
+                "failure": failure_kind(text) if failed else None,
                 "summary": summary or ("done" if not failed else text[:200]),
                 "data": payload.get("data")
                 if isinstance(payload, dict) and "data" in payload
@@ -286,6 +304,7 @@ class AinopsMiddleware(AgentMiddleware):
                     "tool": USE_SKILL,
                     "args": args,
                     "reason": refusal,
+                    "rule": "skill",
                     "why": reason,
                     "skill_step": None,
                     "at_ms": run.elapsed_ms(),

@@ -287,3 +287,35 @@ describe('answers that need no network', () => {
     expect(screen.queryByText(/confidence/)).not.toBeInTheDocument()
   })
 })
+
+describe('what the Now line says about a step that did not run', () => {
+  const thinkingAfter = (event: RunEvent) => {
+    const view = deriveInvestigation([event], NAMES)
+    render(<NowBanner now={view.now} stepCount={view.steps.length} />)
+  }
+
+  it('the check limit is a limit, not a safety block', () => {
+    thinkingAfter({
+      type: 'refused',
+      tool: 'get_routing_protocols',
+      args: { device: 'IPLC-RTR-TRV' },
+      reason: 'the tool budget (16 calls) is used up: write the report now',
+      rule: 'budget',
+      at_ms: 545734,
+    })
+    expect(screen.getByText(/Check limit reached/)).toBeInTheDocument()
+    expect(screen.queryByText(/Blocked/)).not.toBeInTheDocument()
+  })
+
+  it('a change is blocked by the safety check', () => {
+    thinkingAfter({
+      type: 'refused',
+      tool: 'configure_interface',
+      args: { device: 'IPLC-RTR-MAA' },
+      reason: "'configure_interface' is not an AINOPS tool",
+      rule: 'read_only',
+      at_ms: 5,
+    })
+    expect(screen.getByText(/Blocked by the safety check/)).toBeInTheDocument()
+  })
+})

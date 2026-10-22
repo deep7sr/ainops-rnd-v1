@@ -58,7 +58,8 @@ export interface AgentConsole {
   command: string
   /** The first lines the device answered (redacted; "…" where lines were left out). */
   lines: string[]
-  state: 'running' | 'ok' | 'problem' | 'error'
+  /** not_run: the tool turned the AI's request down; nothing was sent to the device. */
+  state: 'running' | 'ok' | 'problem' | 'error' | 'not_run'
   /** One line: the summary, the problem found, or why it failed. */
   verdict: string
 }
@@ -73,8 +74,10 @@ export interface AgentWalk {
   console: AgentConsole | null
   /** The knowledge-graph answer that just came in, and the devices it names (in its order). */
   lookup: { key: string; devices: string[] } | null
-  /** A command the safety check just blocked, and the device it was meant for (if on the map). */
-  blocked: { key: string; device: string | null } | null
+  /** A command a safety rule just blocked, the device it was meant for (if on the map), and the
+   *  rule: read_only (a change, or a command the guard stops) or address (an address the AI never
+   *  saw in the question or the evidence). */
+  blocked: { key: string; device: string | null; rule: 'read_only' | 'address' } | null
   /** Each device's ports from its latest interfaces check: up, down or admin-down. */
   ports: Map<string, { name: string; status: string }[]>
 }
