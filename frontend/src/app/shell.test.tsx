@@ -107,7 +107,7 @@ describe('the Cases menu item', () => {
 })
 
 describe('the lab badge', () => {
-  function healthSays(labSimulated: boolean) {
+  function healthSays(labSimulated: boolean, extra: Record<string, unknown> = {}) {
     const up = { ok: true, tools: 1 }
     vi.stubGlobal(
       'fetch',
@@ -123,6 +123,7 @@ describe('the lab badge', () => {
                   mcp_network: up,
                   mcp_topology: up,
                   graph: { ok: true, last_discovery: null },
+                  ...extra,
                 }),
               ),
             )
@@ -143,5 +144,18 @@ describe('the lab badge', () => {
     openAt('/')
     expect(await screen.findByText('Lab · live devices')).toBeInTheDocument()
     expect(screen.queryByText('Lab · simulated devices')).not.toBeInTheDocument()
+  })
+
+  it('names the database in use', async () => {
+    healthSays(true, { database: { ok: true, name: 'ainops_sim', schema: '0001' } })
+    openAt('/')
+    expect(await screen.findByText(': Postgres connected (ainops_sim)')).toBeInTheDocument()
+  })
+
+  it('says in plain words what is wrong with the database', async () => {
+    const problem = 'schema none, code needs 0001: run `ainops db upgrade`'
+    healthSays(false, { database: { ok: false, name: 'ainops', schema: null, problem } })
+    openAt('/')
+    expect(await screen.findByText(`: ${problem}`)).toBeInTheDocument()
   })
 })

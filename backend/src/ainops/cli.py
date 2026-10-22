@@ -114,6 +114,79 @@ def _ask(question: str) -> None:
     print(f"\n(full result saved to {path})")
 
 
+def _databases() -> list[tuple[str, str]]:
+    """The databases AINOPS uses, as (setting, URL): the real lab's and the simulated lab's."""
+    from ainops.config import get_settings
+
+    settings = get_settings()
+    found = [
+        ("DATABASE_URL", settings.database_url.get_secret_value()),
+        ("SIM_DATABASE_URL", settings.sim_database_url.get_secret_value()),
+    ]
+    return [(name, url) for name, url in found if url]
+
+
+def _db(action: str) -> None:
+    from ainops import db
+    from ainops.config import get_settings
+
+    settings = get_settings()
+    databases = _databases()
+    if not databases:
+        raise SystemExit("No DATABASE_URL or SIM_DATABASE_URL in the repo-root .env")
+    if action == "setup":
+        admin = settings.postgres_admin_password.get_secret_value()
+        if not admin:
+            raise SystemExit("POSTGRES_ADMIN_PASSWORD is not set in the repo-root .env")
+        test = settings.test_database_url.get_secret_value()
+        urls = [url for _, url in databases] + ([test] if test else [])
+        for line in db.setup(admin, urls):
+            print(f"  {line}")
+    if action in ("setup", "upgrade"):
+        for name, url in databases:
+            print(f"Upgrading {db.database_name(url)} ({name}) ...")
+            db.upgrade(url)
+    newest = db.newest_version()
+    for name, url in databases:
+        database = db.Database(url, max_size=1)
+        try:
+            version = database.schema_version()
+        finally:
+            database.close()
+        state = "up to date" if version == newest else f"needs `ainops db upgrade` (code: {newest})"
+        print(f"  {db.database_name(url):<14} ({name}) schema {version or 'none'}: {state}")
+
+
+def _copy_cases(to: str) -> None:
+    """Neo4j's cases into the real lab's or the simulated lab's database (named on purpose:
+    the Neo4j cases do not say which lab they came from)."""
+    from ainops import db
+    from ainops.case_store import Neo4jCases, PostgresCases, copy_cases
+    from ainops.config import get_settings
+    from ainops.topology.graph import GraphStore
+
+    settings = get_settings()
+    secret = settings.sim_database_url if to == "sim" else settings.database_url
+    url = secret.get_secret_value()
+    if not url:
+        raise SystemExit(f"{'SIM_DATABASE_URL' if to == 'sim' else 'DATABASE_URL'} is not set")
+    store = GraphStore(
+        settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
+    )
+    database = db.Database(url, max_size=1)
+    try:
+        done = copy_cases(Neo4jCases(store.driver), PostgresCases(database))
+    finally:
+        database.close()
+        store.close()
+    print(f"Neo4j -> {db.database_name(url)}:")
+    for kind, ids in done.items():
+        print(f"  {kind:<10} {len(ids):>3}  {', '.join(ids)}")
+    if done["different"]:
+        print("  'different': already in Postgres but not the same; left as they are there.")
+    print("Nothing was deleted from Neo4j.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="ainops", description="AINOPS agentic platform")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -128,6 +201,19 @@ def main() -> None:
     capture.add_argument("name", help="e.g. healthy-2026-10-08 or fault1")
     ask = commands.add_parser("ask", help="investigate a question (needs both MCP servers)")
     ask.add_argument("question")
+    database = commands.add_parser("db", help="the Postgres databases (see backend/README.md)")
+    database.add_argument(
+        "action",
+        choices=["setup", "upgrade", "status", "copy-cases"],
+        help="setup: make the roles and databases in .env, then upgrade; "
+        "upgrade: bring each database to the newest schema; status: show each one's schema; "
+        "copy-cases: copy Neo4j's cases into Postgres (needs --to)",
+    )
+    database.add_argument(
+        "--to",
+        choices=["real", "sim"],
+        help="copy-cases: into the real lab's database or the simulated lab's",
+    )
     args = parser.parse_args()
 
     if args.command == "mcp-network":
@@ -148,3 +234,9 @@ def main() -> None:
         _capture(args.name)
     elif args.command == "ask":
         _ask(args.question)
+    elif args.command == "db" and args.action == "copy-cases":
+        if not args.to:
+            parser.error("copy-cases needs --to real or --to sim")
+        _copy_cases(args.to)
+    elif args.command == "db":
+        _db(args.action)

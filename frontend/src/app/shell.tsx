@@ -129,6 +129,15 @@ function HealthBar({ health }: { health: Health | undefined }) {
         detail={up(health?.graph.ok, 'Neo4j connected')}
       />
       <StatusDot
+        ok={health?.database?.ok}
+        label="Database"
+        detail={
+          health?.database?.ok
+            ? `Postgres connected (${health.database.name})`
+            : health?.database?.problem || up(health?.database?.ok, '')
+        }
+      />
+      <StatusDot
         ok={health?.llm_configured}
         label="LLM"
         detail={health ? health.llm_model || 'not configured' : 'checking…'}

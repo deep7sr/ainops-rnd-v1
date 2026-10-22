@@ -21,7 +21,7 @@ from ainops.agent.conversation import Earlier, earlier_of
 from ainops.agent.runner import investigate
 from ainops.agent.skills import Skill, load_skills, parse_skill
 from ainops.api.runs import Refused, Run, RunRegistry
-from ainops.case_store import CaseBook, Neo4jCases
+from ainops.case_store import CaseBook, Neo4jCases, PostgresCases
 from ainops.cases import (
     BY_HAND,
     Case,
@@ -33,6 +33,7 @@ from ainops.cases import (
     review_case,
 )
 from ainops.config import get_settings
+from ainops.db import Database, database_name, newest_version
 from ainops.inventory import PLATFORMS, UnknownDeviceError, load_inventory
 from ainops.inventory_edit import (
     InventoryError,
@@ -57,6 +58,25 @@ MCP_SERVERS = {
 }
 registry = RunRegistry(settings.logs_dir / "investigations")
 _store: GraphStore | None = None
+_db: Database | None = None
+
+
+def database() -> Database:
+    global _db
+    if _db is None:
+        _db = Database(settings.active_database_url)
+    return _db
+
+
+def _database_status() -> dict[str, Any]:
+    name = database_name(settings.active_database_url)
+    version = database().schema_version()
+    newest = newest_version()
+    status: dict[str, Any] = {"ok": version == newest, "name": name, "schema": version}
+    if version != newest:
+        have = version or "none"
+        status["problem"] = f"schema {have}, code needs {newest}: run `ainops db upgrade`"
+    return status
 
 
 def store() -> GraphStore:
@@ -69,7 +89,9 @@ def store() -> GraphStore:
 
 
 def cases() -> CaseBook:
-    return Neo4jCases(store().driver)
+    if settings.cases_store == "neo4j":  # the way back while phase 1 is checked
+        return Neo4jCases(store().driver)
+    return PostgresCases(database())
 
 
 @asynccontextmanager
@@ -77,6 +99,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
     if _store is not None:
         _store.close()
+    if _db is not None:
+        _db.close()
 
 
 app = FastAPI(title="AINOPS API", lifespan=lifespan, docs_url="/api/docs")
@@ -123,6 +147,12 @@ async def health() -> dict[str, Any]:
         status["graph"] = {"ok": True, "last_discovery": last["at"] if last else None}
     except Exception as error:  # noqa: BLE001
         status["graph"] = {"ok": False, "error": type(error).__name__}
+    try:
+        status["database"] = await asyncio.to_thread(_database_status)
+    except LookupError as error:  # a setting missing: the message says which (never a secret)
+        status["database"] = {"ok": False, "problem": str(error)}
+    except Exception as error:  # noqa: BLE001
+        status["database"] = {"ok": False, "error": type(error).__name__}
     return status
 
 

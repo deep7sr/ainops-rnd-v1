@@ -37,6 +37,32 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: SecretStr = SecretStr("")
 
+    # Postgres, the system of record (docs/architecture-production.md): cases now, more later.
+    # postgresql://<user>:<password>@localhost:5432/<database>. The simulated lab has its own
+    # database, so cases made on simulated devices never mix with real ones; the test database
+    # is only for the opt-in tests (`pytest -m postgres`), and its name must end in "_test".
+    database_url: SecretStr = SecretStr("")
+    sim_database_url: SecretStr = SecretStr("")
+    test_database_url: SecretStr = SecretStr("")
+    # The server admin's password (user postgres): only `ainops db setup` and the first start of
+    # scripts/start-postgres.ps1 use it. AINOPS itself logs in with the users in the URLs above.
+    postgres_admin_password: SecretStr = SecretStr("")
+    # Where cases live. "neo4j" is the way back for phase 1 only (the old store, kept unchanged).
+    cases_store: Literal["postgres", "neo4j"] = "postgres"
+
+    @property
+    def active_database_url(self) -> str:
+        """The database for this lab: never the real one while the devices are simulated."""
+        if self.lab_simulated:
+            url = self.sim_database_url.get_secret_value()
+            if not url:
+                raise LookupError("SIM_DATABASE_URL is not set (the simulated lab's database)")
+            return url
+        url = self.database_url.get_secret_value()
+        if not url:
+            raise LookupError("DATABASE_URL is not set")
+        return url
+
     # Which LLM the agent uses:
     # "azure_openai":      the company Azure AI Foundry deployment (AZURE_AI_* and MODEL below).
     #                      Reachable only from the UST network or VPN (firewall on the resource).

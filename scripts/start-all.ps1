@@ -1,12 +1,14 @@
 # Start the whole AINOPS stack, each piece in its own PowerShell window (close a window to stop it):
-#   Neo4j (graph) -> network MCP (8101) -> topology MCP (8102) -> API (8000) -> web UI (5173)
+#   Postgres (5432) -> Neo4j (graph) -> network MCP (8101) -> topology MCP (8102) -> API (8000)
+#   -> web UI (5173)
 # Then open http://localhost:5173
 #
 # AINOPS works on the live lab: LAB_EVE_HOST=<EVE-NG address> in the repo-root .env.
 # With -Sim it works on the simulated lab instead (backend/src/labsim, for when the EVE-NG lab is
 # not available): a "lab simulator" window opens first, and every window gets
 # LAB_EVE_HOST=127.0.0.1 and LAB_SIMULATED=true (these win over .env; the UI then says
-# "simulated devices"). Faults: `cd backend; uv run python -m labsim faults`.
+# "simulated devices", and cases go to SIM_DATABASE_URL, never to the real lab's database).
+# Faults: `cd backend; uv run python -m labsim faults`.
 param([switch]$Sim)
 
 $repo = Split-Path -Parent $PSScriptRoot
@@ -40,6 +42,8 @@ if ($Sim) {
     Start-Piece "AINOPS - lab simulator" $backend "uv run python -m labsim"
     Wait-Port 32769 "Lab simulator"
 }
+Start-Piece "AINOPS - Postgres" $repo "& '$repo\scripts\start-postgres.ps1'"
+Wait-Port 5432 "Postgres"
 Start-Piece "AINOPS - Neo4j" $repo "& '$repo\scripts\start-neo4j.ps1'"
 Wait-Port 7687 "Neo4j"
 Start-Piece "AINOPS - network MCP" $backend "uv run python -m ainops mcp-network"

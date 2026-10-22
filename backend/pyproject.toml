@@ -12,6 +12,9 @@ authors = [
 # The python.org 3.12 build is the Python Smart App Control allows on the lab laptop.
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    # Postgres (the system of record, docs/architecture-production.md). Alembic runs the schema
+    # migrations; it needs SQLAlchemy, used for nothing else (queries are plain SQL via psycopg).
+    "alembic>=1.20.0",
     "fastapi>=0.142.2",
     "langchain>=1.4.3",
     "langchain-mcp-adapters>=0.3.2",
@@ -20,9 +23,12 @@ dependencies = [
     "mcp>=1.30.0",
     "neo4j>=6.3.1",
     "netmiko>=4.8.0",
+    "psycopg-pool>=3.3.3",
+    "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
     "pyyaml>=6.0.3",
+    "sqlalchemy>=2.1.4",
     # Pinned: Smart App Control on the lab laptop blocks the 0.17.1 binary (LangChain needs it).
     "uuid-utils==0.16.0",
     "uvicorn[standard]>=0.54.0",
@@ -61,3 +67,6 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests that need a real Postgres (TEST_DATABASE_URL) run only when asked: `pytest -m postgres`.
+addopts = "-m 'not postgres'"
+markers = ["postgres: needs the test database (TEST_DATABASE_URL, a *_test database)"]

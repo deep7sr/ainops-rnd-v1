@@ -112,6 +112,11 @@ export interface ServiceStatus {
   tools?: number
   error?: string
   last_discovery?: string | null
+  /** Postgres only: the database in use (never a user or password) and its schema version. */
+  name?: string
+  schema?: string | null
+  /** Postgres only: what is wrong, in plain words (e.g. the schema needs an upgrade). */
+  problem?: string
 }
 
 export interface Health {
@@ -124,6 +129,8 @@ export interface Health {
   mcp_network: ServiceStatus
   mcp_topology: ServiceStatus
   graph: ServiceStatus
+  /** Postgres, the system of record (cases). Missing from an older API. */
+  database?: ServiceStatus
 }
 
 export interface GraphInterface {
