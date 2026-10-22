@@ -1,10 +1,11 @@
 // The agent on the live map: a marker that travels along the links to each device the agent runs
-// a command on, the numbered trail of where it went, a radar sweep while a command runs, and a
-// console beside the device with the command and the first lines the device answered. All of it
-// shows real steps only, and the timeline says the same in words (so this layer is aria-hidden).
+// a command on, the numbered trail of where it went, a light running round the device while a
+// command runs, and a console under the map with the command and the first lines the device
+// answered. All of it shows real steps only, and the timeline says the same in words (so this
+// layer is aria-hidden).
 
 import { CircleCheck, CircleSlash, CircleX, SquareTerminal, TriangleAlert } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { GraphLink } from '@/api'
 import { DURATION, EASE_IN_OUT, EASE_OUT } from '@/lib/motion'
@@ -12,9 +13,6 @@ import { cn } from '@/lib/utils'
 import type { AgentConsole, AgentWalk } from './highlight'
 import { NODE_HEIGHT, NODE_WIDTH, VIEW_HEIGHT, VIEW_WIDTH, type Point } from './layout'
 import { routeBetween } from './route'
-
-/** A console folds away this long after its result is in (the timeline keeps it). */
-const FOLD_MS = 4500
 
 /** Where the marker sits on a device: the middle of the box's top edge. */
 const anchor = (p: Point): Point => ({ x: p.x, y: p.y - NODE_HEIGHT / 2 })
@@ -320,31 +318,31 @@ function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boo
   const verdict = console.state === 'running' ? null : VERDICT[console.state]
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.94 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.94 }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DURATION.base, ease: EASE_OUT }}
-      className="overflow-hidden rounded-md border glass font-mono text-[11px] leading-[1.5]"
+      className="flex h-full flex-col overflow-hidden rounded-md border glass font-mono text-[11px] leading-[1.5]"
     >
       <p className="flex shrink-0 items-center gap-1.5 border-b px-2.5 py-1 font-sans text-[10.5px] text-muted-foreground">
         <SquareTerminal aria-hidden="true" className="size-3.5 text-provenance-ai" />
         <span className="font-semibold text-foreground">{console.device}</span>
         <span className="ml-auto">read-only command</span>
       </p>
-      <div className="min-h-0 space-y-px overflow-hidden px-2.5 py-1.5">
+      <div className="min-h-0 flex-1 space-y-px overflow-hidden px-2.5 py-1.5">
         <p className="break-all text-foreground">
           <span className="text-primary">{console.device}#</span>{' '}
           <Typed text={console.command} instant={instant} />
         </p>
-        {/* The output lines only where the map is wide enough: on a narrow map they would cover
-            the devices. The command and the verdict always show. */}
         {console.lines.map((line, i) => (
           <motion.p
             key={i}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: instant ? 0 : 0.15 + i * 0.05, duration: DURATION.fast }}
-            className="hidden truncate whitespace-pre text-muted-foreground @[34rem]:block"
+            className={cn(
+              'truncate whitespace-pre text-muted-foreground',
+              line === '…' && 'text-[10px] leading-[0.8] opacity-60',
+            )}
           >
             {line}
           </motion.p>
@@ -377,51 +375,29 @@ function ConsoleCard({ console, instant }: { console: AgentConsole; instant: boo
   )
 }
 
-/** The console beside the device, as HTML over the map so its text keeps a readable size. */
-export function AgentConsoleOverlay({
+/**
+ * The agent's console, in a strip under the map: over the map it would hide devices (the live run
+ * of 2026-10-22). It keeps the latest command until the next one starts; the timeline keeps all.
+ * Its height is fixed, so the page does not jump as commands come and go.
+ */
+export function AgentConsoleStrip({
   console,
-  positions,
-  viewLeft,
-  viewWidth,
   instant,
 }: {
   console: AgentConsole | null
-  positions: Map<string, Point>
-  viewLeft: number
-  viewWidth: number
   /** Reduced motion: no typing, no staggered lines. */
   instant: boolean
 }) {
-  const [foldedKey, setFoldedKey] = useState<string | null>(null)
-  const key = console?.key ?? null
-  const finished = console !== null && console.state !== 'running'
-  useEffect(() => {
-    if (!key || !finished) return
-    const timer = setTimeout(() => setFoldedKey(key), FOLD_MS)
-    return () => clearTimeout(timer)
-  }, [key, finished])
-
-  const at = console ? positions.get(console.device) : undefined
-  const shown = console && at && foldedKey !== console.key
-  // Docked at the edge of the map away from the device (top band for a device in the lower half,
-  // bottom band otherwise), over the device's column: beside the box it would hide its neighbours.
-  const x = at ? ((at.x - viewLeft) / viewWidth) * 100 : 50
-  const left = `clamp(0px, calc(${x}% - min(8.5rem, 23%)), calc(100% - min(17rem, 46%)))`
-  const edge = at && at.y < VIEW_HEIGHT / 2 ? { bottom: '3%' } : { top: '3%' }
-
   return (
-    <div aria-hidden="true" className="@container pointer-events-none absolute inset-0">
-      <AnimatePresence>
-        {shown && (
-          <div
-            key={console.key}
-            className="absolute z-10 flex max-h-[94%] w-[min(17rem,46%)] flex-col"
-            style={{ left, ...edge }}
-          >
-            <ConsoleCard console={console} instant={instant} />
-          </div>
-        )}
-      </AnimatePresence>
+    <div aria-hidden="true" className="mt-2 h-48">
+      {console ? (
+        <ConsoleCard key={console.key} console={console} instant={instant} />
+      ) : (
+        <p className="flex h-full items-center justify-center gap-1.5 rounded-md border border-dashed text-xs text-muted-foreground">
+          <SquareTerminal aria-hidden="true" className="size-3.5 text-provenance-ai" />
+          The commands the agent runs on a device show here
+        </p>
+      )}
     </div>
   )
 }

@@ -16,6 +16,9 @@ function deviceOfStep(step: Step, onMap: Map<string, string>): string | null {
 
 const GAP = '…'
 
+/** Output lines the console under the map has room for (plus its "…" gaps). */
+const CONSOLE_LINES = 4
+
 /**
  * At most `max` lines of an excerpt for the console on the map, chosen like the excerpt itself:
  * the lines that start a block (not indented) first, then the others, in their original order,
@@ -105,7 +108,7 @@ export function agentWalk(
       key: step.key,
       device,
       command: step.evidence?.command ?? (template ? fillCommand(template, step.args) : ''),
-      lines: consoleLines(step.evidence?.excerpt ?? []),
+      lines: consoleLines(step.evidence?.excerpt ?? [], CONSOLE_LINES),
       state:
         step.state === 'running'
           ? 'running'

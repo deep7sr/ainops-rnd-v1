@@ -11,7 +11,7 @@ import type { GraphDevice, GraphLink, Topology } from '@/api'
 import { DeviceGlyph } from '@/components/device-glyph'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
-import { AgentConsoleOverlay, AgentLayer } from './agent-layer'
+import { AgentConsoleStrip, AgentLayer } from './agent-layer'
 import {
   boxIssue,
   NO_HIGHLIGHT,
@@ -649,14 +649,8 @@ export function NetworkMap({
         ))}
         {agent && <AgentLayer walk={agent} positions={positions} links={topology.links} />}
       </motion.svg>
-      {agent && (
-        <AgentConsoleOverlay
-          console={agent.console}
-          positions={positions}
-          viewLeft={viewLeft}
-          viewWidth={viewRight - viewLeft}
-          instant={reducedMotion}
-        />
+      {agent && agent.mode !== 'resting' && (
+        <AgentConsoleStrip console={agent.console} instant={reducedMotion} />
       )}
     </div>
   )

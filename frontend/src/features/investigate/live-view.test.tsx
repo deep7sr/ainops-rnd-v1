@@ -319,3 +319,51 @@ describe('what the Now line says about a step that did not run', () => {
     expect(screen.getByText(/Blocked by the safety check/)).toBeInTheDocument()
   })
 })
+
+describe('the agent console', () => {
+  const walk = (over: Partial<AgentWalk>): AgentWalk => ({
+    trail: ['IPLC-RTR-TRV'],
+    at: 'IPLC-RTR-TRV',
+    mode: 'checking',
+    console: {
+      key: 'E8',
+      device: 'IPLC-RTR-TRV',
+      command: 'show ip route 192.168.200.10',
+      lines: ['% Network not in table'],
+      state: 'ok',
+      verdict: 'no route to 192.168.200.10',
+    },
+    lookup: null,
+    blocked: null,
+    ports: new Map(),
+    ...over,
+  })
+  const mapWith = (agent: AgentWalk) =>
+    render(
+      <NetworkMap
+        topology={TOPOLOGY}
+        highlight={deriveInvestigation([], NAMES).highlight}
+        agent={agent}
+        showEdges={false}
+      />,
+    ).container
+
+  it('sits under the map, never over a device', () => {
+    // 2026-10-22: docked over the map, it hid ISP-TRV-1 and the site name.
+    const map = mapWith(walk({}))
+    const line = [...map.querySelectorAll('p')].find(
+      (p) => p.textContent === '% Network not in table',
+    )
+    expect(line).toBeDefined()
+    expect(line?.closest('svg')).toBeNull()
+    expect(line?.closest('.absolute')).toBeNull()
+    expect(line?.closest('.h-48')).not.toBeNull()
+  })
+
+  it('keeps its place before the first command and goes when the investigation is over', () => {
+    expect(mapWith(walk({ console: null, mode: 'thinking' })).textContent).toContain(
+      'The commands the agent runs on a device show here',
+    )
+    expect(mapWith(walk({ mode: 'resting' })).textContent).not.toContain('Network not in table')
+  })
+})
