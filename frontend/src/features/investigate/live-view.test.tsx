@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RunEvent, Topology } from '@/api'
 import { boxIssue, faultFrame, type AgentWalk } from '@/features/topology/highlight'
-import { frameView, NODE_WIDTH } from '@/features/topology/layout'
+import { frameView } from '@/features/topology/layout'
 import { NetworkMap } from '@/features/topology/network-map'
 import { deriveInvestigation, touchesNetwork } from './derive'
 import { NowBanner } from './now-banner'
@@ -235,7 +235,7 @@ describe('the root-cause reveal', () => {
   })
 })
 
-it('frames nothing narrower than the boxes, and never more than the whole map', () => {
+it('frames no less than 60% of the map (the neighbours stay in view), never more than all of it', () => {
   const whole = { x: 0, y: 0, width: 1000, height: 560 }
   expect(frameView(whole, [])).toEqual(whole)
   expect(
@@ -245,8 +245,36 @@ it('frames nothing narrower than the boxes, and never more than the whole map', 
     ]),
   ).toEqual(whole)
   const one = frameView(whole, [{ x: 500, y: 300 }])
-  expect(one.width).toBeGreaterThan(NODE_WIDTH)
+  expect(one.width).toBe(600)
+  expect(one.x).toBe(200) // centred on the device
   expect(one.width / one.height).toBeCloseTo(1000 / 560, 5)
+})
+
+it('draws the LANs of the question at the edges, with which end each one is', () => {
+  const view = deriveInvestigation(events, NAMES)
+  const lan = (device: string, name: string, subnet: string) => ({
+    key: `${device}:E1/0`,
+    name,
+    device,
+    interface: 'E1/0',
+    subnet,
+  })
+  const endpoints = [
+    lan('CORE-SW-TRV', 'TRV LAN', '192.168.100.0/24'),
+    lan('CORE-SW-MAA', 'MAA LAN', '192.168.200.0/24'),
+  ]
+  const tags = new Map([['CORE-SW-TRV:E1/0', 'source' as const]])
+  render(
+    <NetworkMap
+      topology={TOPOLOGY}
+      highlight={view.highlight}
+      lans={{ endpoints, tags }}
+      showEdges={false}
+    />,
+  )
+  expect(screen.getByLabelText('TRV LAN, 192.168.100.0/24, source')).toHaveTextContent('SOURCE')
+  // Not named in the question: drawn, faded like the devices off the path.
+  expect(screen.getByLabelText('MAA LAN, 192.168.200.0/24')).toHaveClass('opacity-35')
 })
 
 it('shortens problems to fit a device box', () => {

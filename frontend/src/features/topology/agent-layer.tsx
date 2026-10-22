@@ -11,11 +11,11 @@ import type { GraphLink } from '@/api'
 import { DURATION, EASE_IN_OUT, EASE_OUT } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import type { AgentConsole, AgentWalk } from './highlight'
-import { NODE_HEIGHT, NODE_WIDTH, VIEW_HEIGHT, VIEW_WIDTH, type Point } from './layout'
+import { TILE, VIEW_HEIGHT, VIEW_WIDTH, type Point } from './layout'
 import { routeBetween } from './route'
 
-/** Where the marker sits on a device: the middle of the box's top edge. */
-const anchor = (p: Point): Point => ({ x: p.x, y: p.y - NODE_HEIGHT / 2 })
+/** Where the marker sits on a device: just above the middle of its tile's top edge. */
+const anchor = (p: Point): Point => ({ x: p.x, y: p.y - TILE / 2 - 4 })
 
 function pathThrough(names: string[], positions: Map<string, Point>): Point[] {
   return names.map((n) => positions.get(n)).filter((p): p is Point => !!p)
@@ -51,8 +51,8 @@ function TrailNumbers({ walk, positions }: AgentProps) {
         if (!p) return null
         const label = numbers.join('·')
         const width = 10 + label.length * 6.5
-        const x = p.x - NODE_WIDTH / 2 - 4
-        const y = p.y - NODE_HEIGHT / 2 - 4
+        const x = p.x - TILE / 2 - 2
+        const y = p.y - TILE / 2 - 2
         return (
           <motion.g
             key={device}
@@ -87,8 +87,8 @@ function TrailNumbers({ walk, positions }: AgentProps) {
 
 /** A light running round the device's border while a command runs on it. */
 function ScanBorder({ at }: { at: Point }) {
-  const width = NODE_WIDTH + 14
-  const height = NODE_HEIGHT + 14
+  const width = TILE + 14
+  const height = TILE + 14
   const perimeter = 2 * (width + height)
   return (
     <rect
@@ -96,7 +96,7 @@ function ScanBorder({ at }: { at: Point }) {
       y={at.y - height / 2}
       width={width}
       height={height}
-      rx={10}
+      rx={18}
       strokeWidth={3}
       strokeLinecap="round"
       strokeDasharray={`${perimeter * 0.18} ${perimeter * 0.82}`}
@@ -153,11 +153,11 @@ function LookupSweep({
         return (
           <motion.rect
             key={device}
-            x={p.x - NODE_WIDTH / 2 - 5}
-            y={p.y - NODE_HEIGHT / 2 - 5}
-            width={NODE_WIDTH + 10}
-            height={NODE_HEIGHT + 10}
-            rx={10}
+            x={p.x - TILE / 2 - 5}
+            y={p.y - TILE / 2 - 5}
+            width={TILE + 10}
+            height={TILE + 10}
+            rx={17}
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: [0, 0.9, 0], scale: [0.96, 1, 1.08] }}
             transition={{ duration: 1.2, delay: i * 0.18, ease: EASE_OUT }}
@@ -179,7 +179,7 @@ const BLOCKED_LABEL = {
 function BlockedShield({ at, rule }: { at: Point; rule: keyof typeof BLOCKED_LABEL }) {
   const width = BLOCKED_LABEL[rule].length * 6.6 + 24
   // The shield sits on the top edge of the box, its label above it (never over the box).
-  const y = at.y - NODE_HEIGHT / 2 - 22
+  const y = at.y - TILE / 2 - 22
   return (
     <motion.g
       initial={{ x: at.x, y: y - 40, opacity: 0 }}
@@ -227,23 +227,23 @@ const PORT_CLASS: Record<string, string> = {
   'admin-down': 'fill-status-warning',
 }
 
-/** The ports of a checked device as small lights along the bottom of its box. */
+/** The ports of a checked device as a row of small lights along the bottom of its tile. */
 function PortLights({ at, ports }: { at: Point; ports: { name: string; status: string }[] }) {
-  const shown = ports.slice(0, 14)
-  const size = 5
-  const gap = 3
-  const right = at.x + NODE_WIDTH / 2 - 9
-  const y = at.y + NODE_HEIGHT / 2 - size - 4
+  const shown = ports.slice(0, 10)
+  const size = 3.5
+  const gap = 1.5
+  const left = at.x - (shown.length * (size + gap) - gap) / 2
+  const y = at.y + TILE / 2 - size - 4
   return (
     <g>
       {shown.map((port, i) => (
         <rect
           key={port.name}
-          x={right - (shown.length - i) * (size + gap) + gap}
+          x={left + i * (size + gap)}
           y={y}
           width={size}
           height={size}
-          rx={1.2}
+          rx={1}
           className={PORT_CLASS[port.status] ?? 'fill-status-unknown'}
         >
           <title>{`${port.name}: ${port.status}`}</title>

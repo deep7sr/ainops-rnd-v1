@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { CaseSection } from '@/features/cases/case-section'
 import { skillTitle } from '@/features/skills/labels'
 import { faultFrame } from '@/features/topology/highlight'
+import { endpointTags, lanEndpoints } from '@/features/topology/lan'
 import { NetworkMap } from '@/features/topology/network-map'
 import { usePrefersReducedMotion } from '@/hooks/use-reduced-motion'
 import { useRunEvents } from '@/hooks/use-run-events'
@@ -479,6 +480,16 @@ function Run({ runId }: { runId: string }) {
     [view.steps, running, platforms, commands.data],
   )
 
+  // The user LANs at the edges of the map, and which end of the question each one is.
+  const lanEnds = useMemo(
+    () => (topology.data ? lanEndpoints(topology.data.devices, topology.data.links) : []),
+    [topology.data],
+  )
+  const lans = {
+    endpoints: lanEnds,
+    tags: endpointTags(lanEnds, view.highlight.path, turns[0]?.message ?? ''),
+  }
+
   // When the diagnosis names a fault, the map zooms to it; the engineer can go back to it all.
   const frame = useMemo(
     () => faultFrame(view.highlight, topology.data?.links ?? []),
@@ -574,6 +585,7 @@ function Run({ runId }: { runId: string }) {
                       topology={topology.data}
                       highlight={view.highlight}
                       agent={walk}
+                      lans={lans}
                       focus={zoomed ? frame : null}
                       showEdges={false}
                       selected={panelDevice}

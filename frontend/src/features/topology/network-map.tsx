@@ -26,17 +26,17 @@ import {
   frameView,
   layoutDevices,
   linkIsDown,
-  NODE_HEIGHT,
+  labelAt,
+  layoutLans,
   NODE_WIDTH,
   siteOrder,
   SITE_NAMES,
+  TILE,
   VIEW_HEIGHT,
   VIEW_WIDTH,
   type Point,
 } from './layout'
-
-/** Where a device's name starts in its box: after the picture of the device. */
-const GLYPH_SPACE = 40
+import type { EndpointTag, LanEndpoint } from './lan'
 
 /** Index of the hop this link is on (0 = first hop of the path), or -1. */
 function hopIndex(link: GraphLink, path: string[]): number {
@@ -67,7 +67,8 @@ function LinkLine({
   if (!a || !b) return null
   const start = edgePoint(a, b)
   const end = edgePoint(b, a)
-  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+  const along = labelAt(start, end)
+  const mid = { x: start.x + (end.x - start.x) * along, y: start.y + (end.y - start.y) * along }
   const fault =
     highlight.faultInterfaces.has(`${link.a}:${link.a_interface}`) ||
     highlight.faultInterfaces.has(`${link.b}:${link.b_interface}`)
@@ -89,7 +90,13 @@ function LinkLine({
   const [from, to] = forward ? [start, end] : [end, start]
   const flowing = inPath && !fault && !down
   // The hop number sits just left of the subnet label (any link is long enough for that).
-  const hopAt = { x: mid.x - label.length * 3.4 - 7 - 12, y: mid.y }
+  // On a vertical link the label goes beside it, clear of the names under the tiles (the line
+  // passes under them).
+  const vertical = Math.abs(end.x - start.x) < 20
+  const pillAt = vertical
+    ? { x: mid.x + 56 + label.length * 3.4 + 7, y: (start.y + end.y) / 2 }
+    : mid
+  const hopAt = { x: pillAt.x - label.length * 3.4 - 7 - 12, y: pillAt.y }
 
   return (
     <g
@@ -177,7 +184,7 @@ function LinkLine({
           </text>
         </g>
       )}
-      <g transform={`translate(${mid.x}, ${mid.y})`}>
+      <g transform={`translate(${pillAt.x}, ${pillAt.y})`}>
         <rect
           x={-label.length * 3.4 - 7}
           y={-10}
@@ -271,7 +278,63 @@ const STATE_LABEL: Record<DeviceState, string> = {
   checked: 'checked',
 }
 
-function DeviceBox({
+/** The rounded square with the device's picture: its colour says what the checks found. */
+function tileTone({
+  fault,
+  checking,
+  state,
+  lit,
+}: {
+  fault: boolean
+  checking: boolean
+  state: DeviceState | undefined
+  lit: boolean
+}) {
+  return fault
+    ? 'fill-status-critical-bg stroke-status-critical'
+    : checking
+      ? 'fill-secondary stroke-primary'
+      : state === 'problem'
+        ? 'fill-status-warning-bg stroke-status-warning'
+        : state === 'ok'
+          ? 'fill-status-healthy-bg stroke-status-healthy-border'
+          : state === 'unreachable'
+            ? 'fill-status-unknown-bg stroke-status-unknown-border'
+            : lit
+              ? 'fill-card stroke-primary'
+              : 'fill-card stroke-border'
+}
+
+/** The state badge on a tile's top right corner. */
+function StateBadge({ fault, state }: { fault: boolean; state: DeviceState | undefined }) {
+  const icon = fault ? (
+    <TriangleAlert aria-hidden="true" className="size-3.5 text-status-critical" />
+  ) : state === 'checking' ? (
+    <Loader2
+      aria-hidden="true"
+      className="size-3.5 animate-spin text-primary motion-reduce:animate-none"
+    />
+  ) : state === 'problem' ? (
+    <TriangleAlert aria-hidden="true" className="size-3.5 text-status-warning" />
+  ) : state === 'ok' ? (
+    <CircleCheck aria-hidden="true" className="size-3.5 text-status-healthy" />
+  ) : state === 'unreachable' ? (
+    <CircleX aria-hidden="true" className="size-3.5 text-status-unknown" />
+  ) : state === 'checked' ? (
+    <CircleCheck aria-hidden="true" className="size-3.5 text-muted-foreground" />
+  ) : null
+  if (!icon) return null
+  return (
+    <g transform={`translate(${TILE / 2 - 3}, ${-TILE / 2 + 3})`}>
+      <circle r={10} className="fill-card stroke-border" />
+      <foreignObject x={-7} y={-7} width={14} height={14}>
+        {icon}
+      </foreignObject>
+    </g>
+  )
+}
+
+function DeviceTile({
   device,
   at,
   highlight,
@@ -326,82 +389,51 @@ function DeviceBox({
           onSelect(device.name)
         }
       }}
-      transform={`translate(${at.x - NODE_WIDTH / 2}, ${at.y - NODE_HEIGHT / 2})`}
+      transform={`translate(${at.x}, ${at.y})`}
     >
       <title>{[device.name, spoken, ...issues].filter(Boolean).join(' · ')}</title>
-      {checking && (
-        // A real state (a command is running on this device), so it may move; still when reduced
-        // motion is asked for.
-        <rect
-          x={-6}
-          y={-6}
-          width={NODE_WIDTH + 12}
-          height={NODE_HEIGHT + 12}
-          rx={10}
-          className="animate-pulse fill-none stroke-primary stroke-2 drop-shadow-[0_0_6px_var(--glow)] motion-reduce:animate-none"
-        />
-      )}
       <rect
-        width={NODE_WIDTH}
-        height={NODE_HEIGHT}
-        rx={6}
-        strokeWidth={fault || checking || selected ? 2.5 : inPath || state ? 2 : 1.25}
+        x={-TILE / 2}
+        y={-TILE / 2}
+        width={TILE}
+        height={TILE}
+        rx={14}
+        strokeWidth={fault || checking || selected ? 2.5 : inPath || state ? 2 : 1.5}
         className={cn(
-          'transition-[fill,stroke] duration-300',
-          fault
-            ? 'fill-status-critical-bg stroke-status-critical'
-            : checking
-              ? 'fill-secondary stroke-primary'
-              : state === 'problem'
-                ? 'fill-status-warning-bg stroke-status-warning-border'
-                : state === 'ok'
-                  ? 'fill-status-healthy-bg stroke-status-healthy-border'
-                  : state === 'unreachable'
-                    ? 'fill-status-unknown-bg stroke-status-unknown-border'
-                    : inPath || selected || state === 'checked'
-                      ? 'fill-card stroke-primary'
-                      : 'fill-card stroke-border',
+          'drop-shadow-[0_2px_4px_rgb(16_40_44/0.10)] transition-[fill,stroke] duration-300',
+          tileTone({ fault, checking, state, lit: inPath || selected || state === 'checked' }),
         )}
       />
       <DeviceGlyph
         deviceRole={device.role}
-        x={8}
-        y={(NODE_HEIGHT - 26) / 2}
-        size={26}
+        x={-19}
+        y={-22}
+        size={38}
         className={cn(
           'transition-colors duration-300',
           fault
             ? 'text-status-critical'
-            : checking || inPath || selected
-              ? 'text-primary'
-              : 'text-muted-foreground',
+            : state === 'problem'
+              ? 'text-status-warning'
+              : state === 'ok'
+                ? 'text-status-healthy'
+                : checking || inPath || selected || state
+                  ? 'text-primary'
+                  : 'text-muted-foreground',
         )}
       />
-      <foreignObject x={NODE_WIDTH - 24} y={7} width={17} height={17}>
-        {fault ? (
-          <TriangleAlert aria-hidden="true" className="size-4 text-status-critical" />
-        ) : checking ? (
-          <Loader2
-            aria-hidden="true"
-            className="size-4 animate-spin text-primary motion-reduce:animate-none"
-          />
-        ) : state === 'problem' ? (
-          <TriangleAlert aria-hidden="true" className="size-4 text-status-warning" />
-        ) : state === 'ok' ? (
-          <CircleCheck aria-hidden="true" className="size-4 text-status-healthy" />
-        ) : state === 'unreachable' ? (
-          <CircleX aria-hidden="true" className="size-4 text-status-unknown" />
-        ) : state === 'checked' ? (
-          <CircleCheck aria-hidden="true" className="size-4 text-muted-foreground" />
-        ) : null}
-      </foreignObject>
-      <text x={GLYPH_SPACE} y={23} className="fill-foreground text-[13px] font-semibold">
+      <StateBadge fault={fault} state={state} />
+      <text
+        y={TILE / 2 + 16}
+        textAnchor="middle"
+        className="fill-foreground text-halo text-[12.5px] font-semibold"
+      >
         {device.name}
       </text>
-      <foreignObject x={GLYPH_SPACE} y={31} width={NODE_WIDTH - GLYPH_SPACE - 8} height={18}>
+      <foreignObject x={-NODE_WIDTH / 2} y={TILE / 2 + 20} width={NODE_WIDTH} height={18}>
         <div
           className={cn(
-            'truncate text-[11px] leading-[18px]',
+            'truncate text-halo text-center text-[11px] leading-[18px]',
             fault
               ? 'font-semibold text-status-critical'
               : checking
@@ -416,6 +448,126 @@ function DeviceBox({
           {detail}
         </div>
       </foreignObject>
+    </g>
+  )
+}
+
+const TAG_TEXT: Record<EndpointTag, string> = {
+  source: 'SOURCE',
+  destination: 'DESTINATION',
+  question: 'IN YOUR QUESTION',
+}
+
+/** A user LAN at the edge of the map, and its link to its core switch. */
+function LanEnd({
+  lan,
+  at,
+  device,
+  tag,
+  investigating,
+}: {
+  lan: LanEndpoint
+  at: Point
+  device: Point
+  tag: EndpointTag | undefined
+  investigating: boolean
+}) {
+  const start = edgePoint(device, at)
+  const end = edgePoint(at, device)
+  const end_ = tag === 'source' || tag === 'destination'
+  const faded = investigating && !tag
+  const tagText = tag ? TAG_TEXT[tag] : ''
+  const tagWidth = tagText.length * 6.4 + 14
+  return (
+    <g
+      aria-label={[lan.name, lan.subnet, tag ? tagText.toLowerCase() : '']
+        .filter(Boolean)
+        .join(', ')}
+      className={cn('transition-opacity duration-500', faded && 'opacity-35')}
+    >
+      <line
+        x1={start.x}
+        y1={start.y}
+        x2={end.x}
+        y2={end.y}
+        strokeWidth={end_ ? 3 : 2}
+        className={end_ ? 'stroke-primary' : 'stroke-muted-foreground/40'}
+      />
+      {end_ && (
+        <line
+          x1={tag === 'source' ? end.x : start.x}
+          y1={end.y}
+          x2={tag === 'source' ? start.x : end.x}
+          y2={end.y}
+          strokeWidth={1.5}
+          className="flow-dash stroke-card/90"
+        />
+      )}
+      <text
+        x={start.x + (end.x - start.x) * 0.2}
+        y={start.y - 8}
+        textAnchor="middle"
+        className={cn('font-mono text-[10px]', end_ ? 'fill-primary' : 'fill-muted-foreground')}
+      >
+        {lan.interface}
+      </text>
+      <g transform={`translate(${at.x}, ${at.y})`}>
+        <rect
+          x={-TILE / 2 + 4}
+          y={-TILE / 2 + 4}
+          width={TILE - 8}
+          height={TILE - 8}
+          rx={12}
+          strokeWidth={end_ ? 2 : 1.5}
+          className={cn(
+            'drop-shadow-[0_2px_4px_rgb(16_40_44/0.10)]',
+            tag ? 'fill-card stroke-primary' : 'fill-card stroke-border',
+          )}
+        />
+        <DeviceGlyph
+          deviceRole="lan"
+          x={-17}
+          y={-17}
+          size={34}
+          className={tag ? 'text-primary' : 'text-muted-foreground'}
+        />
+        <text
+          y={TILE / 2 + 16}
+          textAnchor="middle"
+          className="fill-foreground text-halo text-[12.5px] font-semibold"
+        >
+          {lan.name}
+        </text>
+        <text
+          y={TILE / 2 + 31}
+          textAnchor="middle"
+          className="fill-muted-foreground text-halo font-mono text-[10.5px]"
+        >
+          {lan.subnet}
+        </text>
+        {tag && (
+          <g transform={`translate(0, ${-TILE / 2 - 14})`}>
+            <rect
+              x={-tagWidth / 2}
+              y={-9}
+              width={tagWidth}
+              height={18}
+              rx={9}
+              className={end_ ? 'fill-primary' : 'fill-secondary stroke-primary/40'}
+            />
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              className={cn(
+                'text-[9.5px] font-bold tracking-wider',
+                end_ ? 'fill-primary-foreground' : 'fill-secondary-foreground',
+              )}
+            >
+              {tagText}
+            </text>
+          </g>
+        )}
+      </g>
     </g>
   )
 }
@@ -491,9 +643,13 @@ export function NetworkMap({
   onSelect,
   showEdges = true,
   agent = null,
+  lans = null,
   className,
 }: {
   topology: Topology
+  /** The user LANs to draw at the edges (the investigation map), and which end of the question
+   *  each one is. */
+  lans?: { endpoints: LanEndpoint[]; tags: Map<string, EndpointTag> } | null
   highlight?: MapHighlight
   /** The agent during a live investigation: its marker, trail and console. */
   agent?: AgentWalk | null
@@ -506,13 +662,14 @@ export function NetworkMap({
 }) {
   const reducedMotion = usePrefersReducedMotion()
   const positions = layoutDevices(topology.devices)
+  const lanAt = lans ? layoutLans(lans.endpoints, topology.devices, positions) : new Map()
   const sites = siteOrder(topology.devices)
   const columnWidth = VIEW_WIDTH / Math.max(sites.length, 1)
   const edges = showEdges ? edgeInterfaces(topology.devices, topology.links) : []
   // Once the agent has found its path, what is not on it fades (it cannot matter).
   const investigating = highlight.path.length > 0
   // Without the edge labels, zoom to the devices so the map is readable in a narrow panel.
-  const xs = [...positions.values()].map((p) => p.x)
+  const xs = [...positions.values(), ...lanAt.values()].map((p) => p.x)
   const zoom = !showEdges && xs.length > 0
   const viewLeft = zoom ? Math.max(0, Math.min(...xs) - NODE_WIDTH / 2 - 40) : 0
   const viewRight = zoom ? Math.min(VIEW_WIDTH, Math.max(...xs) + NODE_WIDTH / 2 + 40) : VIEW_WIDTH
@@ -573,7 +730,7 @@ export function NetworkMap({
           const leftSide = at.x < VIEW_WIDTH / 2
           const siblings = edges.filter((e) => e.device === edge.device)
           const offset = (siblings.indexOf(edge) - (siblings.length - 1) / 2) * 22
-          const x0 = at.x + (leftSide ? -NODE_WIDTH / 2 : NODE_WIDTH / 2)
+          const x0 = at.x + (leftSide ? -TILE / 2 - 6 : TILE / 2 + 6)
           const x1 = x0 + (leftSide ? -26 : 26)
           const y = at.y + offset
           const label = `${edge.name} ${edge.ipv4[0]}`
@@ -612,6 +769,20 @@ export function NetworkMap({
           )
         })}
 
+        {lans?.endpoints.map((lan) => {
+          const at = lanAt.get(lan.key)
+          const device = positions.get(lan.device)
+          return at && device ? (
+            <LanEnd
+              key={lan.key}
+              lan={lan}
+              at={at}
+              device={device}
+              tag={lans.tags.get(lan.key)}
+              investigating={investigating}
+            />
+          ) : null
+        })}
         {topology.links.map((link) => (
           <LinkLine
             key={link.key}
@@ -626,7 +797,7 @@ export function NetworkMap({
         {topology.devices.map((device) => {
           const at = positions.get(device.name)
           return at ? (
-            <DeviceBox
+            <DeviceTile
               key={device.name}
               device={device}
               at={at}

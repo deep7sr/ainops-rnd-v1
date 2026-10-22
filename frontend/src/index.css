@@ -283,6 +283,17 @@
   backdrop-filter: blur(10px) saturate(1.2);
 }
 
+/* Map: words a line may pass under (a device's name) get an outline in the card's colour. */
+@utility text-halo {
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  text-shadow:
+    0 0 3px var(--card),
+    0 0 3px var(--card);
+}
+
 /* Look: what is active right now (teal), and what the AI is doing right now (violet). */
 @utility glow {
   box-shadow:
